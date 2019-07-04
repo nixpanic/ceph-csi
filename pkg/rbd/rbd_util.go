@@ -102,9 +102,9 @@ func createImage(pOpts *rbdVolume, volSz int64, cr *util.Credentials) error {
 	volSzMiB := fmt.Sprintf("%dM", volSz)
 
 	if pOpts.ImageFormat == rbdImageFormat2 {
-		klog.V(4).Infof("rbd: create %s size %s format %s (features: %s) using mon %s, pool %s ", image, volSzMiB, pOpts.ImageFormat, pOpts.ImageFeatures, pOpts.Monitors, pOpts.Pool)
+		klog.V(4).Infof("rbd: create %s size %s format %s (features: %s) using mon %s, pool %s, multi-node=%t", image, volSzMiB, pOpts.ImageFormat, pOpts.ImageFeatures, pOpts.Monitors, pOpts.Pool, pOpts.ImageShared)
 	} else {
-		klog.V(4).Infof("rbd: create %s size %s format %s using mon %s, pool %s", image, volSzMiB, pOpts.ImageFormat, pOpts.Monitors, pOpts.Pool)
+		klog.V(4).Infof("rbd: create %s size %s format %s using mon %s, pool %s, multi-node=%t", image, volSzMiB, pOpts.ImageFormat, pOpts.Monitors, pOpts.Pool, pOpts.ImageShared)
 	}
 	args := []string{"create", image, "--size", volSzMiB, "--pool", pOpts.Pool, "--id", cr.ID, "-m", pOpts.Monitors, "--key=" + cr.Key, "--image-format", pOpts.ImageFormat}
 	if pOpts.ImageFormat == rbdImageFormat2 {
