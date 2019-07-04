@@ -88,6 +88,11 @@ func (cs *ControllerServer) parseVolCreateRequest(req *csi.CreateVolumeRequest) 
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
+	// multi-node volumes need to be created with a special flag
+	if isMultiNode {
+		rbdVol.ImageShared = true
+	}
+
 	rbdVol.RequestName = req.GetName()
 
 	// Volume Size - Default is 1 GiB

@@ -54,6 +54,7 @@ type rbdVolume struct {
 	Pool               string
 	ImageFormat        string
 	ImageFeatures      string
+	ImageShared        bool
 	VolSize            int64
 	Mounter            string
 	DisableInUseChecks bool
@@ -108,6 +109,9 @@ func createImage(pOpts *rbdVolume, volSz int64, cr *util.Credentials) error {
 	args := []string{"create", image, "--size", volSzMiB, "--pool", pOpts.Pool, "--id", cr.ID, "-m", pOpts.Monitors, "--key=" + cr.Key, "--image-format", pOpts.ImageFormat}
 	if pOpts.ImageFormat == rbdImageFormat2 {
 		args = append(args, "--image-feature", pOpts.ImageFeatures)
+	}
+	if pOpts.ImageShared {
+		args = append(args, "--image-shared")
 	}
 	output, err := execCommand("rbd", args)
 
