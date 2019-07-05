@@ -119,6 +119,16 @@ func createImage(pOpts *rbdVolume, volSz int64, cr *util.Credentials) error {
 		return errors.Wrapf(err, "failed to create rbd image, command output: %s", string(output))
 	}
 
+	if pOpts.ImageShared {
+		args = []string{"--pool", pOpts.Pool, "config", "image", "set", image, "rbd_cache", "false"}
+		output, err := execCommand("rbd", args)
+		if err != nil {
+			// TODO: delete the image and return an error, or report a warning?
+			deleteImage(pOpts, cr)
+			return errors.Wrapf(err, "failed to disable caching, command output: %s", string(output))
+		}
+	}
+
 	return nil
 }
 
