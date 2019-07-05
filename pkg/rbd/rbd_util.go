@@ -113,6 +113,8 @@ func createImage(pOpts *rbdVolume, volSz int64, cr *util.Credentials) error {
 	if pOpts.ImageShared {
 		args = append(args, "--image-shared")
 	}
+	// TODO: remove debug logging
+	klog.V(4).Infof("rbd: create failed: %v", args)
 	output, err := execCommand("rbd", args)
 
 	if err != nil {
@@ -120,9 +122,11 @@ func createImage(pOpts *rbdVolume, volSz int64, cr *util.Credentials) error {
 	}
 
 	if pOpts.ImageShared {
-		args = []string{"--pool", pOpts.Pool, "config", "image", "set", image, "rbd_cache", "false"}
+		args = []string{ "config", "image", "set", image, "--pool", pOpts.Pool, "--id", cr.ID, "-m", pOpts.Monitors, "--key=" + cr.Key,"rbd_cache", "false"}
 		output, err := execCommand("rbd", args)
 		if err != nil {
+			// TODO: remove debug logging
+			klog.V(4).Infof("rbd: config image set failed: %v", args)
 			// TODO: delete the image and return an error, or report a warning?
 			deleteImage(pOpts, cr)
 			return errors.Wrapf(err, "failed to disable caching, command output: %s", string(output))
