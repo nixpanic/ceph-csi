@@ -110,9 +110,10 @@ func createImage(pOpts *rbdVolume, volSz int64, cr *util.Credentials) error {
 	if pOpts.ImageFormat == rbdImageFormat2 {
 		args = append(args, "--image-feature", pOpts.ImageFeatures)
 	}
-	if pOpts.ImageShared {
-		args = append(args, "--image-shared")
-	}
+	// TODO: only disabled for testing
+	//if pOpts.ImageShared {
+	//	args = append(args, "--image-shared")
+	//}
 	// TODO: remove debug logging
 	klog.V(4).Infof("rbd: create failed: %v", args)
 	output, err := execCommand("rbd", args)
