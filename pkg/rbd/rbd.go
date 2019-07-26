@@ -34,6 +34,9 @@ const (
 
 	// csiConfigFile is the location of the CSI config file
 	csiConfigFile = "/etc/ceph-csi-config/config.json"
+
+	// PID limit to increase configuration by container runtime
+	pidLimit = -1 // -1 translates to 'max'
 )
 
 // Driver contains the default identity,node and controller struct
@@ -101,6 +104,11 @@ func (r *Driver) Run(driverName, nodeID, endpoint, instanceID string, containeri
 	// Create ceph.conf for use with CLI commands
 	if err = util.WriteCephConfig(); err != nil {
 		klog.Fatalf("failed to write ceph configuration file (%v)", err)
+	}
+
+	// the driver may need a higher PID limit for handling all concurrent requests
+	if err = util.GetAndSetPIDLimit(pidLimit) ; err != nil {
+		klog.Warningf("failed to set PID limit: %v", err)
 	}
 
 	// Use passed in instance ID, if provided for omap suffix naming

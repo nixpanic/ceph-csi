@@ -35,6 +35,9 @@ const (
 
 	// RADOS namespace to store CSI specific objects and keys
 	radosNamespace = "csi"
+
+	// PID limit to increase configuration by container runtime
+	pidLimit = -1 // -1 translates to 'max'
 )
 
 // PluginFolder defines the location of ceph plugin
@@ -117,6 +120,11 @@ func (fs *Driver) Run(driverName, nodeID, endpoint, volumeMounter, mountCacheDir
 
 	if err := util.WriteCephConfig(); err != nil {
 		klog.Fatalf("failed to write ceph configuration file: %v", err)
+	}
+
+	// the driver may need a higher PID limit for handling all concurrent requests
+	if err := util.GetAndSetPIDLimit(pidLimit); err != nil {
+		klog.Warningf("failed to set PID limit: %v", err)
 	}
 
 	// Use passed in instance ID, if provided for omap suffix naming
