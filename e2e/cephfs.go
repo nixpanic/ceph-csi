@@ -37,19 +37,19 @@ func deployCephfsPlugin() {
 }
 
 func deleteCephfsPlugin() {
-	_, err := framework.RunKubectl("delete", "-f", cephfsDirPath+cephfsProvisioner)
+	_, err := framework.RunKubectl("delete", "--ignore-not-found", "-f", cephfsDirPath+cephfsProvisioner)
 	if err != nil {
 		e2elog.Logf("failed to delete cephfs provisioner %v", err)
 	}
-	_, err = framework.RunKubectl("delete", "-f", cephfsDirPath+cephfsProvisionerRBAC)
+	_, err = framework.RunKubectl("delete", "--ignore-not-found", "-f", cephfsDirPath+cephfsProvisionerRBAC)
 	if err != nil {
 		e2elog.Logf("failed to delete cephfs provisioner rbac %v", err)
 	}
-	_, err = framework.RunKubectl("delete", "-f", cephfsDirPath+cephfsNodePlugin)
+	_, err = framework.RunKubectl("delete", "--ignore-not-found", "-f", cephfsDirPath+cephfsNodePlugin)
 	if err != nil {
 		e2elog.Logf("failed to delete cephfs nodeplugin %v", err)
 	}
-	_, err = framework.RunKubectl("delete", "-f", cephfsDirPath+cephfsNodePluginRBAC)
+	_, err = framework.RunKubectl("delete", "--ignore-not-found", "-f", cephfsDirPath+cephfsNodePluginRBAC)
 	if err != nil {
 		e2elog.Logf("failed to delete cephfs nodeplugin rbac %v", err)
 	}

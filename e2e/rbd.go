@@ -39,19 +39,19 @@ func deployRBDPlugin() {
 }
 
 func deleteRBDPlugin() {
-	_, err := framework.RunKubectl("delete", "-f", rbdDirPath+rbdProvisioner)
+	_, err := framework.RunKubectl("delete", "--ignore-not-found", "-f", rbdDirPath+rbdProvisioner)
 	if err != nil {
 		e2elog.Logf("failed to delete rbd provisioner %v", err)
 	}
-	_, err = framework.RunKubectl("delete", "-f", rbdDirPath+rbdProvisionerRBAC)
+	_, err = framework.RunKubectl("delete", "--ignore-not-found", "-f", rbdDirPath+rbdProvisionerRBAC)
 	if err != nil {
 		e2elog.Logf("failed to delete provisioner rbac %v", err)
 	}
-	_, err = framework.RunKubectl("delete", "-f", rbdDirPath+rbdNodePlugin)
+	_, err = framework.RunKubectl("delete", "--ignore-not-found", "-f", rbdDirPath+rbdNodePlugin)
 	if err != nil {
 		e2elog.Logf("failed to delete nodeplugin %v", err)
 	}
-	_, err = framework.RunKubectl("delete", "-f", rbdDirPath+rbdNodePluginRBAC)
+	_, err = framework.RunKubectl("delete", "--ignore-not-found", "-f", rbdDirPath+rbdNodePluginRBAC)
 	if err != nil {
 		e2elog.Logf("failed to delete nodeplugin rbac %v", err)
 	}
