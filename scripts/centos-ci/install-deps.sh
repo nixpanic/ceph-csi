@@ -8,7 +8,7 @@ sudo yum -y install centos-release-scl epel-release
 
 sudo yum -y install \
 	make \
-	go-toolset-7-golang \
+	golang-bin \
 	/usr/bin/shellcheck \
 	rh-ruby26 \
 	yamllint \
@@ -16,5 +16,5 @@ sudo yum -y install \
 
 scl enable rh-ruby26 'gem install mdl'
 curl -L https://git.io/get_helm.sh | bash
-scl enable go-toolset-7 'go get github.com/securego/gosec/cmd/gosec'
-scl enable go-toolset-7 'go get github.com/golang/dep/cmd/dep'
+go get github.com/securego/gosec/cmd/gosec
+go get github.com/golang/dep/cmd/dep
