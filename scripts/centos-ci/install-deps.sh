@@ -8,7 +8,7 @@ sudo yum -y install centos-release-scl epel-release
 
 sudo yum -y install \
 	make \
-	golang-bin \
+	/usr/bin/go \
 	/usr/bin/shellcheck \
 	rh-ruby26 \
 	yamllint \
