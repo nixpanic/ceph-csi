@@ -6,12 +6,17 @@
 # exit on error
 set -e
 
+# install packages from base CentOS (prevent updates from SCL)
+sudo yum -y install \
+	make \
+	gcc \
+	; # empty line for 'git blame'
+
 # make the golang scl available
 sudo yum -y install centos-release-scl epel-release
 
 sudo yum -y install \
-	make \
-	/usr/bin/go \
+	golang \
 	/usr/bin/shellcheck \
 	rh-ruby26 \
 	yamllint \
