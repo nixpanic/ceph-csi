@@ -3,6 +3,9 @@
 # dependencies for the tests are listed in scripts/lint-text.sh
 #
 
+# exit on error
+set -e
+
 # make the golang scl available
 sudo yum -y install centos-release-scl epel-release
 
