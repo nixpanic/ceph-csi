@@ -6,6 +6,9 @@
 # exit on error
 set -e
 
+# make sure all updates get installed
+sudo yum -y update
+
 # install packages from base CentOS (prevent updates from SCL)
 sudo yum -y install \
 	make \
