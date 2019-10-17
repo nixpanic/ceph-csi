@@ -1,4 +1,9 @@
 #!/bin/bash
+#
+# - install Vagrant
+# - clone the git repo and checkout the branch to test
+# - run ./scripts/vagrant/make-test.sh to start a VM and run the tests
+#
 
 # if anything fails, we'll abort
 set -e
@@ -36,7 +41,7 @@ WORKDIR=$(mktemp -d)
 pushd "${WORKDIR}"
 
 # TODO: update branch and repo location
-git clone -b centos-ci/make-test https://github.com/nixpanic/ceph-csi.git
+git clone -b vagrant/make-test https://github.com/nixpanic/ceph-csi.git
 pushd ceph-csi
 
 # by default we clone the master branch, but maybe this was triggered through a PR?
@@ -55,14 +60,14 @@ then
 fi
 
 # set the current working directory so that the script find the Vagrantfile
-pushd scripts/centos-ci
+pushd scripts/vagrant
 set +e
 scl enable sclo-vagrant1 ./make-tests.sh
 RET=$?
 
 # cleanup, can fail
 scl enable sclo-vagrant1 vagrant destroy
-popd # scripts/centos-ci
+popd # scripts/vagrant
 popd # ceph-csi
 popd # ${WORKDIR}
 rm -rf "${WORKDIR}"

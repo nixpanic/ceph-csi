@@ -55,6 +55,9 @@ static-check:
 func-test:
 	go test github.com/ceph/ceph-csi/e2e $(TESTOPTIONS)
 
+vagrant-test:
+	cd scripts/vagrant && ./make-tests.sh
+
 .PHONY: cephcsi
 cephcsi:
 	if [ ! -d ./vendor ]; then dep ensure -vendor-only; fi
