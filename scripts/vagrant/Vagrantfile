@@ -61,6 +61,8 @@ Vagrant.configure("2") do |config|
   # information on available options.
 
   config.vm.provider "libvirt" do |lv|
+    # minikube requires at least 2 CPUs
+    lv.cpus = 2
     # Customize the amount of memory on the VM:
     lv.memory = "4096"
   end
