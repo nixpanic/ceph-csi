@@ -65,3 +65,47 @@ alias kubectl='sudo /usr/local/bin/minikube kubectl -- '
 ./cn kube > cn.yaml
 sed -i 's/memory: 512M/memory: 1024M/g' cn.yaml
 kubectl apply -f cn.yaml
+
+# need to wait until everything is ready
+while ! kubectl exec -ti ceph-nano-0 -- /usr/bin/ceph status
+do
+	sleep 10
+done
+
+cd ${GOPATH}/src/github.com/ceph/ceph-csi/examples/rbd
+sed 's/<plaintext ID>/admin/' -i secret.yaml
+ADMIN_KEY=$(kubectl exec -ti ceph-nano-0 -- /usr/bin/ceph auth get client.admin | awk '/key =/{print $3}')
+sed "s/<Ceph auth key corresponding to ID above>/${ADMIN_KEY}/" -i secret.yaml
+
+kubectl apply -f secret.yaml
+. plugin-deploy.sh
+
+# need to get the configuration of the Ceph cluster
+CLUSTER_ID=$(kubectl exec -ti ceph-nano-0 -- /usr/bin/ceph status | awk '/id:/{print $2}')
+# single mon is on the ceph-nano pod
+MON_IP=$(kubectl get pod/ceph-nano-0 --template='{{.status.podIP}}')
+MON_PORt='3300'
+
+# based on ceph-csi/examples/csi-config-map-sample.yaml
+cat << EOF > csi-config-map.yaml
+---
+apiVersion: v1
+kind: ConfigMap
+data:
+  config.json: |-
+    [
+      {
+        "clusterID": "${CLUSTER_ID}",
+        "monitors": [
+          "${MON_IP}:${MON_PORT}"
+        ]
+      }
+    ]
+metadata:
+  name: ceph-csi-config
+EOF
+
+kubectl apply -f csi-config-map.yaml
+kubectl create -f storageclass.yaml
+
+
