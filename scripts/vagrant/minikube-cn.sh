@@ -75,10 +75,10 @@ done
 cd ${GOPATH}/src/github.com/ceph/ceph-csi/examples/rbd
 sed 's/<plaintext ID>/admin/' -i secret.yaml
 ADMIN_KEY=$(kubectl exec -ti ceph-nano-0 -- /usr/bin/ceph auth get client.admin | awk '/key =/{print $3}')
-sed "s/<Ceph auth key corresponding to ID above>/${ADMIN_KEY}/" -i secret.yaml
+sed "s|<Ceph auth key corresponding to ID above>|${ADMIN_KEY}|" -i secret.yaml
 
 kubectl apply -f secret.yaml
-. plugin-deploy.sh
+. plugin-deploy.sh ${GOPATH}/src/github.com/ceph/ceph-csi
 
 # need to get the configuration of the Ceph cluster
 CLUSTER_ID=$(kubectl exec -ti ceph-nano-0 -- /usr/bin/ceph status | awk '/id:/{print $2}')
