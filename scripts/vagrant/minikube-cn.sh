@@ -78,7 +78,9 @@ ADMIN_KEY=$(kubectl exec -ti ceph-nano-0 -- /usr/bin/ceph auth get client.admin 
 sed "s|<Ceph auth key corresponding to ID above>|${ADMIN_KEY}|" -i secret.yaml
 
 kubectl apply -f secret.yaml
-. plugin-deploy.sh ${GOPATH}/src/github.com/ceph/ceph-csi
+
+cd ${GOPATH}/src/github.com/ceph/ceph-csi/examples/rbd
+. plugin-deploy.sh
 
 # need to get the configuration of the Ceph cluster
 CLUSTER_ID=$(kubectl exec -ti ceph-nano-0 -- /usr/bin/ceph status | awk '/id:/{print $2}')
