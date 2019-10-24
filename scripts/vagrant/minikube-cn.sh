@@ -151,7 +151,7 @@ do
 	sleep 10
 done
 
-tar c csi-sanity-secrets.yaml ${HOME}/bin/csi-sanity | kubectl exec -t -c csi-rbdplugin ${CSI_PROVISIONER_POD} -- tar x -C /tmp
+tar c csi-sanity-secrets.yaml ${HOME}/bin/csi-sanity | kubectl exec -ti -c csi-rbdplugin ${CSI_PROVISIONER_POD} -- tar x -C /tmp
 
 # finally run the csi-sanity tests
 kubectl exec -t -c csi-rbdplugin ${CSI_PROVISIONER_POD} -- /tmp/$HOME/bin/csi-sanity --csi.endpoint=\${CSI_ENDPOINT} --csi.secrets=/tmp/csi-sanity-secrets.yaml
