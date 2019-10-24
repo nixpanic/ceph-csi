@@ -51,8 +51,10 @@ cd cn
 make
 sudo cp cn /usr/local/bin/
 
-go get github.com/kubernetes-csi/csi-test
-cd $GOPATH/src/github.com/kubernetes-csi/csi-test
+mkdir -p $GOPATH/src/github.com/kubernetes-csi
+cd $GOPATH/src/github.com/kubernetes-csi
+git clone https://github.com/kubernetes-csi/csi-test
+cd csi-test
 make build-sanity
 sudo cp cmd/csi-sanity/csi-sanity /usr/local/bin/
 
