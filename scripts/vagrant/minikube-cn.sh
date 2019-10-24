@@ -59,12 +59,11 @@ sudo /usr/local/bin/minikube start --vm-driver=none
 #sudo cp -r /root/.kube /root/.minikube $HOME
 #sudo chown -R $USER $HOME/.kube $HOME/.minikube
 
-# create kubectl script (TODO: copy kubectl from minikube cache)
-sudo tee /usr/local/bin/kubectl << EOF
-#!/bin/sh
-sudo /usr/local/bin/minikube kubectl -- "\${@}"
-EOF
-sudo chmod +x /usr/local/bin/kubectl
+# download kubectl and setup access for local user
+sudo /usr/local/bin/minikube kubectl version
+sudo cp /root/.minikube/cache/*/kubectl /usr/local/bin/
+sudo cp -r /root/.kube $HOME/
+sudo chown $USER -R $HOME/.kube
 
 # show the version, might dump some non-yaml to stdout
 ./cn version
