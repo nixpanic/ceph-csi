@@ -146,9 +146,11 @@ EOF
 CSI_PROVISIONER_POD=$(kubectl get pods -l app=csi-rbdplugin-provisioner -ojsonpath='{.items[0].metadata.name}')
 
 # the provisioner may not be ready in time?
-while ! kubectl exec -t -c csi-rbdplugin ${CSI_PROVISIONER_POD} -- date
+STATUS_PHASE='Unknown'
+while [[ "${STATUS_PHASE}" != 'Running' ]]
 do
 	sleep 10
+	STATUS_PHASE=$(kubectl get pods -l app=csi-rbdplugin-provisioner -ojsonpath='{.items[0].status.phase}')
 done
 
 tar c csi-sanity-secrets.yaml ${HOME}/bin/csi-sanity | kubectl exec -ti -c csi-rbdplugin ${CSI_PROVISIONER_POD} -- tar x -C /tmp
