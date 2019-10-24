@@ -49,13 +49,19 @@ cd $GOPATH/src/github.com/ceph
 git clone https://github.com/ceph/cn
 cd cn
 make
+sudo cp cn /usr/local/bin/
+
+go get github.com/kubernetes-csi/csi-test
+cd $GOPATH/src/github.com/kubernetes-csi/csi-test
+make build-sanity
+sudo cp cmd/csi-sanity/csi-sanity /usr/local/bin/
 
 ###
 ### Installation of tools finished, start deployment
 ###
 
 # when CRI-O is used, pass --container-runtime=cri-o
-sudo -E /usr/local/bin/minikube start --vm-driver=none
+sudo /usr/local/bin/minikube start --vm-driver=none
 
 # download kubectl and setup access for local user
 KUBE_VERSION=$(sudo /usr/local/bin/minikube kubectl version -- --client -o yaml | awk '/gitVersion:/{print $2}')
@@ -66,8 +72,8 @@ sed "s|/root/|$HOME/|g" -i $HOME/.kube/config
 kubectl version
 
 # show the version, might dump some non-yaml to stdout
-./cn version
-./cn kube > cn.yaml
+cn version
+cn kube > cn.yaml
 sed -i 's/memory: 512M/memory: 1024M/g' cn.yaml
 kubectl apply -f cn.yaml
 
@@ -114,7 +120,25 @@ metadata:
   name: ceph-csi-config
 EOF
 
-kubectl create -f csi-config-map.yaml
+kubectl replace -f csi-config-map.yaml
 kubectl create -f storageclass.yaml
 
+# csi-sanity needs its own secrets file
+cat << EOF > csi-sanity-secrets.yaml
+CreateVolumeSecret:
+  clusterID: ${CLUSTER_ID}
+  monitors: [ "${MON_IP}:${MON_PORT}" ]
+  pool: rbd
+#  dataPool: 
+  imageFeatures: layering
+#  mounter: rbd
+  userID: admin
+  userKey: ${ADMIN_KEY}
+DeleteVolumeSecret:
+NodeStageVolumeSecret:
+NodePublishVolumeSecret:
+ControllerValidateVolumeCapabilitiesSecret:
+EOF
 
+# TODO: copy /usr/local/bin/csi-sanity and secrets to csi-rbdplugin pod(s)
+# csi-sanity --csi.endpoint=<your csi driver endpoint> --csi.secrets=<path to secrets file>
