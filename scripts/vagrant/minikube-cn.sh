@@ -142,5 +142,9 @@ NodePublishVolumeSecret:
 ControllerValidateVolumeCapabilitiesSecret:
 EOF
 
-# TODO: copy /usr/local/bin/csi-sanity and secrets to csi-rbdplugin pod(s)
-# csi-sanity --csi.endpoint=<your csi driver endpoint> --csi.secrets=<path to secrets file>
+# copy /usr/local/bin/csi-sanity and secrets to csi-rbdplugin pod(s)
+CSI_PROVISIONER_POD=$(kubectl get pods -l app=csi-rbdplugin-provisioner -ojsonpath='{.items[0].metadata.name}')
+tar c csi-sanity-secrets.yaml /usr/local/bin/csi-sanity | kubectl exec -t -c csi-rbdplugin ${CSI_PROVISIONER_POD} -- tar x -C /tmp
+
+# finally run the csi-sanity tests
+kubectl exec -t -c csi-rbdplugin ${CSI_PROVISIONER_POD} -- /tmp/usr/local/bin/csi-sanity --csi.endpoint=\${CSI_ENDPOINT} --csi.secrets=/tmp/csi-sanity-secrets.yaml
