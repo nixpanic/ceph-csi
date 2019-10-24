@@ -88,10 +88,10 @@ cd ${GOPATH}/src/github.com/ceph/ceph-csi/examples/rbd
 . plugin-deploy.sh
 
 # need to get the configuration of the Ceph cluster
-CLUSTER_ID=$(kubectl exec -ti ceph-nano-0 -- /usr/bin/ceph status | awk '/id:/{print $2}')
+CLUSTER_ID=$(kubectl exec -ti ceph-nano-0 -- /usr/bin/ceph status | awk '/id:/{print $2}' | tr -d '\r')
 # single mon is on the ceph-nano pod
 MON_IP=$(kubectl get pod/ceph-nano-0 --template='{{.status.podIP}}')
-MON_PORt='3300'
+MON_PORT='3300'
 
 # based on ceph-csi/examples/csi-config-map-sample.yaml
 cat << EOF > csi-config-map.yaml
