@@ -129,7 +129,8 @@ kubectl create -f storageclass.yaml
 cat << EOF > csi-sanity-secrets.yaml
 CreateVolumeSecret:
   clusterID: ${CLUSTER_ID}
-  monitors: [ "${MON_IP}:${MON_PORT}" ]
+  monitors:
+  - ${MON_IP}:${MON_PORT}
   pool: rbd
 #  dataPool: 
   imageFeatures: layering
