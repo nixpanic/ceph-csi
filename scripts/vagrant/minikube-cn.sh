@@ -55,7 +55,7 @@ make
 ###
 
 # when CRI-O is used, pass --container-runtime=cri-o
-sudo -E /usr/local/bin/minikube start --vm-driver=none --embed-certs
+sudo -E /usr/local/bin/minikube start --vm-driver=none
 
 # download kubectl and setup access for local user
 KUBE_VERSION=$(sudo /usr/local/bin/minikube kubectl version -- --client -o yaml | awk '/gitVersion:/{print $2}')
