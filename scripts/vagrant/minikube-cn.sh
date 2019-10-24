@@ -130,7 +130,7 @@ cat << EOF > csi-sanity-secrets.yaml
 CreateVolumeSecret:
   clusterID: ${CLUSTER_ID}
   monitors:
-  - ${MON_IP}:${MON_PORT}
+  - "${MON_IP}:${MON_PORT}"
   pool: rbd
 #  dataPool: 
   imageFeatures: layering
