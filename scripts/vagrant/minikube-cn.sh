@@ -80,14 +80,14 @@ sed -i 's/memory: 512M/memory: 1024M/g' cn.yaml
 kubectl apply -f cn.yaml
 
 # need to wait until everything is ready
-while ! kubectl exec -ti ceph-nano-0 -- /usr/bin/ceph status
+while ! kubectl exec -t ceph-nano-0 -- /usr/bin/ceph status
 do
 	sleep 10
 done
 
 cd ${GOPATH}/src/github.com/ceph/ceph-csi/examples/rbd
 sed 's/<plaintext ID>/admin/' -i secret.yaml
-ADMIN_KEY=$(kubectl exec -ti ceph-nano-0 -- /usr/bin/ceph auth get client.admin | awk '/key =/{print $3}')
+ADMIN_KEY=$(kubectl exec -t ceph-nano-0 -- /usr/bin/ceph auth get client.admin | awk '/key =/{print $3}')
 sed "s|<Ceph auth key corresponding to ID above>|${ADMIN_KEY}|" -i secret.yaml
 
 kubectl apply -f secret.yaml
@@ -98,7 +98,7 @@ cd ${GOPATH}/src/github.com/ceph/ceph-csi/examples/rbd
 cd ${GOPATH}/src/github.com/ceph/ceph-csi/examples/rbd
 
 # need to get the configuration of the Ceph cluster
-CLUSTER_ID=$(kubectl exec -ti ceph-nano-0 -- /usr/bin/ceph status | awk '/id:/{print $2}' | tr -d '\r')
+CLUSTER_ID=$(kubectl exec -t ceph-nano-0 -- /usr/bin/ceph status | awk '/id:/{print $2}' | tr -d '\r')
 # single mon is on the ceph-nano pod
 MON_IP=$(kubectl get pod/ceph-nano-0 --template='{{.status.podIP}}')
 MON_PORT='3300'
@@ -144,6 +144,13 @@ EOF
 
 # copy /usr/local/bin/csi-sanity and secrets to csi-rbdplugin pod(s)
 CSI_PROVISIONER_POD=$(kubectl get pods -l app=csi-rbdplugin-provisioner -ojsonpath='{.items[0].metadata.name}')
+
+# the provisioner may not be ready in time?
+while ! kubectl exec -t -c csi-rbdplugin ${CSI_PROVISIONER_POD} -- date
+do
+	sleep 10
+done
+
 tar c csi-sanity-secrets.yaml /usr/local/bin/csi-sanity | kubectl exec -t -c csi-rbdplugin ${CSI_PROVISIONER_POD} -- tar x -C /tmp
 
 # finally run the csi-sanity tests
