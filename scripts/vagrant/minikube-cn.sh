@@ -60,9 +60,9 @@ sudo /usr/local/bin/minikube start --vm-driver=none
 #sudo chown -R $USER $HOME/.kube $HOME/.minikube
 
 # create kubectl script (TODO: copy kubectl from minikube cache)
-cat << EOF > /usr/local/bin/kubectl
+sudo tee /usr/local/bin/kubectl << EOF
 #!/bin/sh
-sudo /usr/local/bin/minikube kubectl -- "${@}"
+sudo /usr/local/bin/minikube kubectl -- "\${@}"
 EOF
 chmod +x /usr/local/bin/kubectl
 
