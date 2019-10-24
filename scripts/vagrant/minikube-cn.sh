@@ -49,14 +49,14 @@ cd $GOPATH/src/github.com/ceph
 git clone https://github.com/ceph/cn
 cd cn
 make
-sudo cp cn /usr/local/bin/
+install -D cn $HOME/bin/cn
 
 mkdir -p $GOPATH/src/github.com/kubernetes-csi
 cd $GOPATH/src/github.com/kubernetes-csi
 git clone https://github.com/kubernetes-csi/csi-test
 cd csi-test
 make build-sanity
-sudo cp cmd/csi-sanity/csi-sanity /usr/local/bin/
+install -D cmd/csi-sanity/csi-sanity $HOME/bin/csi-sanity
 
 ###
 ### Installation of tools finished, start deployment
