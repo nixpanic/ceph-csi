@@ -64,7 +64,7 @@ sudo tee /usr/local/bin/kubectl << EOF
 #!/bin/sh
 sudo /usr/local/bin/minikube kubectl -- "\${@}"
 EOF
-chmod +x /usr/local/bin/kubectl
+sudo chmod +x /usr/local/bin/kubectl
 
 # show the version, might dump some non-yaml to stdout
 ./cn version
