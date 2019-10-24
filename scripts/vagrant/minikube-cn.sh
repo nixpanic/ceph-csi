@@ -86,6 +86,8 @@ kubectl apply -f secret.yaml
 
 cd ${GOPATH}/src/github.com/ceph/ceph-csi/examples/rbd
 . plugin-deploy.sh
+# plugin-deploy.sh changes working dir :-/
+cd ${GOPATH}/src/github.com/ceph/ceph-csi/examples/rbd
 
 # need to get the configuration of the Ceph cluster
 CLUSTER_ID=$(kubectl exec -ti ceph-nano-0 -- /usr/bin/ceph status | awk '/id:/{print $2}' | tr -d '\r')
@@ -112,7 +114,7 @@ metadata:
   name: ceph-csi-config
 EOF
 
-kubectl apply -f csi-config-map.yaml
+kubectl create -f csi-config-map.yaml
 kubectl create -f storageclass.yaml
 
 
