@@ -133,10 +133,22 @@ CreateVolumeSecret:
 DeleteVolumeSecret:
   userID: admin
   userKey: ${ADMIN_KEY}
+ControllerPublishVolumeSecret:
+  userID: admin
+  userKey: ${ADMIN_KEY}
+ControllerUnpublishVolumeSecret:
+  userID: admin
+  userKey: ${ADMIN_KEY}
 NodeStageVolumeSecret:
   userID: admin
   userKey: ${ADMIN_KEY}
 NodePublishVolumeSecret:
+  userID: admin
+  userKey: ${ADMIN_KEY}
+CreateSnapshotSecret:
+  userID: admin
+  userKey: ${ADMIN_KEY}
+DeleteSnapshotSecret:
   userID: admin
   userKey: ${ADMIN_KEY}
 ControllerValidateVolumeCapabilitiesSecret:
