@@ -128,19 +128,29 @@ kubectl create -f storageclass.yaml
 # csi-sanity needs its own secrets file
 cat << EOF > csi-sanity-secrets.yaml
 CreateVolumeSecret:
-  clusterID: ${CLUSTER_ID}
-  monitors:
-  - "${MON_IP}:${MON_PORT}"
-  pool: rbd
-#  dataPool: 
-  imageFeatures: layering
-#  mounter: rbd
   userID: admin
   userKey: ${ADMIN_KEY}
 DeleteVolumeSecret:
+  userID: admin
+  userKey: ${ADMIN_KEY}
 NodeStageVolumeSecret:
+  userID: admin
+  userKey: ${ADMIN_KEY}
 NodePublishVolumeSecret:
+  userID: admin
+  userKey: ${ADMIN_KEY}
 ControllerValidateVolumeCapabilitiesSecret:
+  userID: admin
+  userKey: ${ADMIN_KEY}
+EOF
+
+cat << EOF > csi-sanity-parameters.yaml
+clusterID: ${CLUSTER_ID}
+monitors: ${MON_IP}:${MON_PORT}
+pool: rbd
+#dataPool: 
+#imageFeatures: layering
+#mounter: rbd
 EOF
 
 # copy /usr/local/bin/csi-sanity and secrets to csi-rbdplugin pod(s)
@@ -154,7 +164,7 @@ do
 	STATUS_PHASE=$(kubectl get pods -l app=csi-rbdplugin-provisioner -ojsonpath='{.items[0].status.phase}')
 done
 
-tar c csi-sanity-secrets.yaml ${HOME}/bin/csi-sanity | kubectl exec -ti -c csi-rbdplugin ${CSI_PROVISIONER_POD} -- tar x -C /tmp
+tar c csi-sanity-secrets.yaml csi-sanity-parameters.yaml ${HOME}/bin/csi-sanity | kubectl exec -i -c csi-rbdplugin ${CSI_PROVISIONER_POD} -- tar x -C /tmp
 
 # finally run the csi-sanity tests
-kubectl exec -t -c csi-rbdplugin ${CSI_PROVISIONER_POD} -- /tmp/$HOME/bin/csi-sanity --csi.endpoint=\${CSI_ENDPOINT} --csi.secrets=/tmp/csi-sanity-secrets.yaml
+kubectl exec -t -c csi-rbdplugin ${CSI_PROVISIONER_POD} -- /tmp/$HOME/bin/csi-sanity --csi.endpoint=\${CSI_ENDPOINT} --csi.secrets=/tmp/csi-sanity-secrets.yaml --csi.testvolumeparameters=/tmp/csi-sanity-parameters.yaml -ginkgo.failFast
