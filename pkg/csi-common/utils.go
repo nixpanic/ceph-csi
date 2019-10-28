@@ -153,7 +153,8 @@ func contextIDInjector(ctx context.Context, req interface{}, info *grpc.UnarySer
 
 	// TODO: why can handler be nil?
 	if handler == nil {
-		klog.Errorf(util.Log(ctx, "GRPC handler is nil?!"), err)
+		klog.Errorf(util.Log(ctx, "GRPC handler is nil?!"))
+		return nil, status.Errorf(codes.Internal, "GRPC handler is nil?!")
 	}
 
 	return handler(ctx, req)
