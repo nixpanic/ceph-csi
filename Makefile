@@ -58,6 +58,9 @@ func-test:
 vagrant-test:
 	cd scripts/vagrant && ./make-tests.sh
 
+vagrant-csi-sanity:
+	cd scripts/vagrant && ./make-csi-test.sh
+
 .PHONY: cephcsi
 cephcsi:
 	if [ ! -d ./vendor ]; then dep ensure -vendor-only; fi
