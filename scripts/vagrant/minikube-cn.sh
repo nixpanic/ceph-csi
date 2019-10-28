@@ -166,7 +166,7 @@ clusterID: ${CLUSTER_ID}
 monitors: ${MON_IP}:${MON_PORT}
 pool: rbd
 #dataPool: 
-#imageFeatures: layering
+imageFeatures: layering
 #mounter: rbd
 EOF
 
