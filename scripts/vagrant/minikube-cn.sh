@@ -186,6 +186,8 @@ tar c csi-sanity-secrets.yaml csi-sanity-parameters.yaml ${HOME}/bin/csi-sanity 
 # finally run the csi-sanity tests
 if ! kubectl exec -t -c csi-rbdplugin ${CSI_PROVISIONER_POD} -- /tmp/$HOME/bin/csi-sanity --csi.endpoint=/csi/csi-provisioner.sock --csi.secrets=/tmp/csi-sanity-secrets.yaml --csi.testvolumeparameters=/tmp/csi-sanity-parameters.yaml -ginkgo.failFast
 then
+	echo "sometimes logs have not been flushed yet, waiting 30 seconds..."
+	sleep 30
 	kubectl logs -c csi-rbdplugin ${CSI_PROVISIONER_POD}
 	exit 1
 fi
