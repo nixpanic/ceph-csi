@@ -187,7 +187,7 @@ done
 tar c csi-sanity-secrets.yaml csi-sanity-parameters.yaml ${HOME}/bin/csi-sanity | kubectl exec -i -c csi-rbdplugin ${CSI_PROVISIONER_POD} -- tar x -C /tmp
 
 # finally run the csi-sanity tests
-if ! kubectl exec -t -c csi-rbdplugin ${CSI_PROVISIONER_POD} -- /tmp/$HOME/bin/csi-sanity --csi.endpoint=/csi/csi-provisioner.sock --csi.secrets=/tmp/csi-sanity-secrets.yaml --csi.testvolumeparameters=/tmp/csi-sanity-parameters.yaml -ginkgo.failFast
+if ! kubectl exec -t -c csi-rbdplugin ${CSI_PROVISIONER_POD} -- /tmp/$HOME/bin/csi-sanity --csi.endpoint=/csi/csi-provisioner.sock --csi.secrets=/tmp/csi-sanity-secrets.yaml --csi.testvolumeparameters=/tmp/csi-sanity-parameters.yaml
 then
 	kubectl logs -c csi-rbdplugin ${CSI_PROVISIONER_POD}
 	exit 1
