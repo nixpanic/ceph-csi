@@ -102,7 +102,7 @@ cd ${GOPATH}/src/github.com/ceph/ceph-csi/examples/rbd
 # plugin-deploy.sh changes working dir :-/
 cd ${GOPATH}/src/github.com/ceph/ceph-csi/examples/rbd
 
-# reduce the numbet of provisioner pods, only one provisioner can be active (which one?)
+# reduce the number of provisioner pods, only one provisioner can be active (which one?)
 kubectl scale --replicas=1 deployment.apps/csi-rbdplugin-provisioner
 
 # need to get the configuration of the Ceph cluster
