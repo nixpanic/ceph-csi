@@ -105,6 +105,14 @@ cd ${GOPATH}/src/github.com/ceph/ceph-csi/examples/rbd
 # reduce the number of provisioner pods, only one provisioner can be active (which one?)
 kubectl scale --replicas=1 deployment.apps/csi-rbdplugin-provisioner
 
+# wait until one provisioner is active
+CSI_PROVISIONERS=3
+while [[ ${CSI_PROVISIONERS} -ne 1 ]]
+do
+	sleep 10
+	CSI_PROVISIONERS=$(kubectl get pods -l app=csi-rbdplugin-provisioner -ojsonpath='{.items[0].metadata.name}' | wc -w)
+done
+
 # need to get the configuration of the Ceph cluster
 CLUSTER_ID=$(kubectl exec -t ceph-nano-0 -- /usr/bin/ceph status | awk '/id:/{print $2}' | tr -d '\r')
 # single mon is on the ceph-nano pod
