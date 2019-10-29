@@ -102,6 +102,9 @@ cd ${GOPATH}/src/github.com/ceph/ceph-csi/examples/rbd
 # plugin-deploy.sh changes working dir :-/
 cd ${GOPATH}/src/github.com/ceph/ceph-csi/examples/rbd
 
+# reduce the numbet of provisioner pods, only one provisioner can be active (which one?)
+kubectl scale --replicas=1 deployment.apps/csi-rbdplugin-provisioner
+
 # need to get the configuration of the Ceph cluster
 CLUSTER_ID=$(kubectl exec -t ceph-nano-0 -- /usr/bin/ceph status | awk '/id:/{print $2}' | tr -d '\r')
 # single mon is on the ceph-nano pod
