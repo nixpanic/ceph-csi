@@ -220,7 +220,11 @@ func (cs *ControllerServer) createBackingImage(ctx context.Context, rbdVol *rbdV
 
 	// if VolumeContentSource is not nil, this request is for snapshot
 	if req.VolumeContentSource != nil {
-		// TODO: check VolumeContentSource: Volume
+		// clone from a Volume is unsupported
+		if req.VolumeContentSource.GetVolume() != nil {
+			return status.Error(codes.InvalidArgument, "cloning from a Volume is not suported")
+		}
+
 		if err = cs.checkSnapshot(ctx, req, rbdVol); err != nil {
 			return err
 		}
