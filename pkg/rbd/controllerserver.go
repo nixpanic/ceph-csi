@@ -450,6 +450,22 @@ func (cs *ControllerServer) ValidateVolumeCapabilities(ctx context.Context, req 
 		return nil, status.Error(codes.InvalidArgument, "empty volume capabilities in request")
 	}
 
+
+	cr, err := util.NewUserCredentials(req.GetSecrets())
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	defer cr.DeleteCredentials()
+
+	rbdVol := new(rbdVolume)
+	err = genVolFromVolID(ctx, rbdVol, req.GetVolumeId(), cr)
+	if err != nil {
+		if _, ok := err.(ErrImageNotFound); ok {
+			return nil, status.Errorf(codes.NotFound, "Volume ID %s not found", req.GetVolumeId())
+		}
+		return nil, status.Errorf(codes.Internal, err.Error())
+	}
+
 	for _, cap := range req.VolumeCapabilities {
 		if cap.GetAccessMode().GetMode() != csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER {
 			return &csi.ValidateVolumeCapabilitiesResponse{Message: ""}, nil
