@@ -61,6 +61,8 @@ cd $GOPATH/src/github.com/kubernetes-csi
 git clone https://github.com/kubernetes-csi/csi-test
 cd csi-test
 # TODO: apply some Work-In-Progress fixes
+git config --global user.name "csi-sanity for Ceph-CSI"
+git config --global user.email "noreply@example.net"
 curl 'https://github.com/kubernetes-csi/csi-test/compare/master...nixpanic:misc-fixes.patch' | git am
 make build-sanity
 install -D cmd/csi-sanity/csi-sanity $HOME/bin/csi-sanity
