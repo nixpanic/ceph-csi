@@ -462,6 +462,8 @@ func (cs *ControllerServer) ValidateVolumeCapabilities(ctx context.Context, req 
 	if err != nil {
 		if _, ok := err.(ErrImageNotFound); ok {
 			return nil, status.Errorf(codes.NotFound, "Volume ID %s not found", req.GetVolumeId())
+		} else if _, ok := err.(ErrInvalidVolID); ok {
+			return nil, status.Errorf(codes.NotFound, err.Error())
 		}
 		return nil, status.Errorf(codes.Internal, err.Error())
 	}
