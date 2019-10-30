@@ -60,6 +60,8 @@ mkdir -p $GOPATH/src/github.com/kubernetes-csi
 cd $GOPATH/src/github.com/kubernetes-csi
 git clone https://github.com/kubernetes-csi/csi-test
 cd csi-test
+# TODO: apply some Work-In-Progress fixes
+curl 'https://github.com/kubernetes-csi/csi-test/compare/master...nixpanic:misc-fixes.patch' | git am
 make build-sanity
 install -D cmd/csi-sanity/csi-sanity $HOME/bin/csi-sanity
 
