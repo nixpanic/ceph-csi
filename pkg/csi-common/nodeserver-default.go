@@ -87,10 +87,15 @@ func (ns *DefaultNodeServer) NodeGetCapabilities(ctx context.Context, req *csi.N
 // NodeGetVolumeStats returns volume stats
 func (ns *DefaultNodeServer) NodeGetVolumeStats(ctx context.Context, req *csi.NodeGetVolumeStatsRequest) (*csi.NodeGetVolumeStatsResponse, error) {
 	var err error
+
+	if req.GetVolumeId() == "" {
+		return nil, status.Error(codes.NotFound, "Volume ID is empty")
+	}
+
 	targetPath := req.GetVolumePath()
 	if targetPath == "" {
 		err = fmt.Errorf("targetpath %v is empty", targetPath)
-		return nil, status.Error(codes.InvalidArgument, err.Error())
+		return nil, status.Error(codes.NotFound, err.Error())
 	}
 	/*
 		volID := req.GetVolumeId()
@@ -117,18 +122,18 @@ func (ns *DefaultNodeServer) NodeGetVolumeStats(ctx context.Context, req *csi.No
 
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, status.Errorf(codes.InvalidArgument, "targetpath %s doesnot exist", targetPath)
+			return nil, status.Errorf(codes.NotFound, "targetpath %s doesnot exist", targetPath)
 		}
 		return nil, err
 	}
 	if !isMnt {
-		return nil, status.Errorf(codes.InvalidArgument, "targetpath %s is not mounted", targetPath)
+		return nil, status.Errorf(codes.NotFound, "targetpath %s is not mounted", targetPath)
 	}
 
 	cephMetricsProvider := volume.NewMetricsStatFS(targetPath)
 	volMetrics, volMetErr := cephMetricsProvider.GetMetrics()
 	if volMetErr != nil {
-		return nil, status.Error(codes.Internal, volMetErr.Error())
+		return nil, status.Error(codes.NotFound, volMetErr.Error())
 	}
 
 	available, ok := (*(volMetrics.Available)).AsInt64()
