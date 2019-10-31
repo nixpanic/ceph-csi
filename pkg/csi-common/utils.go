@@ -156,6 +156,13 @@ func contextIDInjector(ctx context.Context, req interface{}, info *grpc.UnarySer
 func logGRPC(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 	klog.V(3).Infof(util.Log(ctx, "GRPC call: %s"), info.FullMethod)
 	klog.V(5).Infof(util.Log(ctx, "GRPC request: %s"), protosanitizer.StripSecrets(req))
+
+	if handler == nil {
+		err := fmt.Errorf("GRPC error: handler() is nil")
+		klog.Error(util.Log(ctx, err.Error()))
+		return nil, err
+	}
+
 	resp, err := handler(ctx, req)
 	if err != nil {
 		klog.Errorf(util.Log(ctx, "GRPC error: %v"), err)
