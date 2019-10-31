@@ -144,6 +144,12 @@ func getReqID(req interface{}) string {
 var id uint64
 
 func contextIDInjector(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+	if handler == nil {
+		err := fmt.Errorf("GRPC error: handler() is nil")
+		klog.Error(util.Log(ctx, err.Error()))
+		return nil, err
+	}
+
 	atomic.AddUint64(&id, 1)
 	ctx = context.WithValue(ctx, util.CtxKey, id)
 	reqID := getReqID(req)
