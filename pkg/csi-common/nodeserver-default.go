@@ -55,6 +55,8 @@ func (ns *DefaultNodeServer) NodeExpandVolume(ctx context.Context, req *csi.Node
 
 // NodeGetInfo returns node ID
 func (ns *DefaultNodeServer) NodeGetInfo(ctx context.Context, req *csi.NodeGetInfoRequest) (*csi.NodeGetInfoResponse, error) {
+	klog.Errorf(util.Log(ctx, "ns=%v, ctx=%v, req=%v", ns, cts, req))
+
 	klog.V(5).Infof(util.Log(ctx, "Using default NodeGetInfo"))
 
 	if ns.Driver == nil {
