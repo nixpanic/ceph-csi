@@ -89,13 +89,13 @@ func (ns *DefaultNodeServer) NodeGetVolumeStats(ctx context.Context, req *csi.No
 	var err error
 
 	if req.GetVolumeId() == "" {
-		return nil, status.Error(codes.NotFound, "Volume ID is empty")
+		return nil, status.Error(codes.InvalidArgument, "Volume ID is empty")
 	}
 
 	targetPath := req.GetVolumePath()
 	if targetPath == "" {
 		err = fmt.Errorf("targetpath %v is empty", targetPath)
-		return nil, status.Error(codes.NotFound, err.Error())
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 	/*
 		volID := req.GetVolumeId()
