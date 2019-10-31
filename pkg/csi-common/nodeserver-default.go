@@ -91,6 +91,7 @@ func (ns *DefaultNodeServer) NodeGetVolumeStats(ctx context.Context, req *csi.No
 	if req.GetVolumeId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "Volume ID is empty")
 	}
+	// TODO: check if the Volume ID is valid and the volume exists
 
 	targetPath := req.GetVolumePath()
 	if targetPath == "" {
@@ -127,7 +128,7 @@ func (ns *DefaultNodeServer) NodeGetVolumeStats(ctx context.Context, req *csi.No
 		return nil, err
 	}
 	if !isMnt {
-		return nil, status.Errorf(codes.NotFound, "targetpath %s is not mounted", targetPath)
+		return nil, status.Errorf(codes.InvalidArgument, "targetpath %s is not mounted", targetPath)
 	}
 
 	cephMetricsProvider := volume.NewMetricsStatFS(targetPath)
