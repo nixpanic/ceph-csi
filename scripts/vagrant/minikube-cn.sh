@@ -198,10 +198,35 @@ done
 
 tar c csi-sanity-secrets.yaml csi-sanity-parameters.yaml ${HOME}/bin/csi-sanity | kubectl exec -i -c csi-rbdplugin ${CSI_PROVISIONER_POD} -- tar x -C /tmp
 
+
+# copy /usr/local/bin/csi-sanity and secrets to csi-rbdplugin pod(s)
+CSI_NODE_POD=$(kubectl get pods -l app=csi-rbdplugin -ojsonpath='{.items[0].metadata.name}')
+
+# the provisioner may not be ready in time?
+STATUS_PHASE='Unknown'
+while [[ "${STATUS_PHASE}" != 'Running' ]]
+do
+	sleep 10
+	STATUS_PHASE=$(kubectl get pods -l app=csi-rbdplugin -ojsonpath='{.items[0].status.phase}')
+done
+
+tar c csi-sanity-secrets.yaml csi-sanity-parameters.yaml ${HOME}/bin/csi-sanity | kubectl exec -i -c csi-rbdplugin ${CSI_NODE_POD} -- tar x -C /tmp
+
+
 # finally run the csi-sanity tests
+FAILURES=0
+
 if ! kubectl exec -t -c csi-rbdplugin ${CSI_PROVISIONER_POD} -- /tmp/$HOME/bin/csi-sanity --csi.endpoint=/csi/csi-provisioner.sock --csi.secrets=/tmp/csi-sanity-secrets.yaml --csi.testvolumeparameters=/tmp/csi-sanity-parameters.yaml
 then
 	kubectl logs -c csi-rbdplugin ${CSI_PROVISIONER_POD}
-	exit 1
+	FAILURES=$[ FAILURES + 1 ]
 fi
 
+if ! kubectl exec -t -c csi-rbdplugin ${CSI_NODE_POD} -- /tmp/$HOME/bin/csi-sanity --csi.endpoint=/csi/csi.sock --csi.secrets=/tmp/csi-sanity-secrets.yaml --csi.testvolumeparameters=/tmp/csi-sanity-parameters.yaml
+then
+	kubectl logs -c csi-rbdplugin ${CSI_NODE_POD}
+	FAILURES=$[ FAILURES + 2 ]
+fi
+
+
+exit ${FAILURES}
