@@ -253,31 +253,32 @@ func rbdManagerTaskDeleteImage(ctx context.Context, pOpts *rbdVolume, cr *util.C
 
 // deleteImage deletes a ceph image with provision and volume options.
 func deleteImage(ctx context.Context, pOpts *rbdVolume, cr *util.Credentials) error {
-	var output []byte
-
-	image := pOpts.RbdImageName
 	found, _, err := rbdStatus(ctx, pOpts, cr)
 	if err != nil {
 		return err
 	}
 	if found {
-		klog.Info(util.Log(ctx, "rbd is still being used "), image)
-		return fmt.Errorf("rbd %s is still being used", image)
+		klog.Info(util.Log(ctx, "rbd is still being used "), pOpts.RbdImageName)
+		return fmt.Errorf("rbd %s is still being used", pOpts.RbdImageName)
 	}
 
-	klog.V(4).Infof(util.Log(ctx, "rbd: rm %s using mon %s, pool %s"), image, pOpts.Monitors, pOpts.Pool)
+	klog.V(4).Infof(util.Log(ctx, "rbd: rm %s using mon %s, pool %s"), pOpts.RbdImageName, pOpts.Monitors, pOpts.Pool)
 
 	// attempt to use Ceph manager based deletion support if available
 	rbdCephMgrSupported, err := rbdManagerTaskDeleteImage(ctx, pOpts, cr)
 	if !rbdCephMgrSupported {
-		// attempt older style deletion
-		args := []string{"rm", image, "--pool", pOpts.Pool, "--id", cr.ID, "-m", pOpts.Monitors,
-			"--keyfile=" + cr.KeyFile}
-		output, err = execCommand("rbd", args)
-	}
+		var ioctx *rados.IOContext
+		ioctx, err = pOpts.getIoctx(cr)
+		if err != nil {
+			return err
+		}
+		defer ioctx.Destroy()
 
+		image := librbd.GetImage(ioctx, pOpts.RbdImageName)
+		err = image.Remove()
+	}
 	if err != nil {
-		klog.Errorf(util.Log(ctx, "failed to delete rbd image: %v, command output: %s"), err, string(output))
+		klog.Errorf(util.Log(ctx, "failed to delete rbd image: %v"), err)
 	}
 
 	return err
