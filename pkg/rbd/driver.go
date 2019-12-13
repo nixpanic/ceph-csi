@@ -138,6 +138,7 @@ func (r *Driver) Run(conf *util.Config, cachePersister util.CachePersister) {
 		if err != nil {
 			klog.Fatalf("failed to start node server, err %v\n", err)
 		}
+		r.cs = NewControllerServer(r.cd, cachePersister)
 	}
 
 	if conf.IsControllerServer {
