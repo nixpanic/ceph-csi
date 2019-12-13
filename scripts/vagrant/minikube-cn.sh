@@ -102,7 +102,9 @@ sed "s|<Ceph auth key corresponding to ID above>|${ADMIN_KEY}|" -i secret.yaml
 kubectl apply -f secret.yaml
 
 cd ${GOPATH}/src/github.com/ceph/ceph-csi/examples/rbd
-. plugin-deploy.sh
+# shellcheck disable=SC1091
+# unable to find plugin-deploy.sh
+source plugin-deploy.sh
 # plugin-deploy.sh changes working dir :-/
 cd ${GOPATH}/src/github.com/ceph/ceph-csi/examples/rbd
 
@@ -196,7 +198,7 @@ do
 	STATUS_PHASE=$(kubectl get pods -l app=csi-rbdplugin-provisioner -ojsonpath='{.items[0].status.phase}')
 done
 
-tar c csi-sanity-secrets.yaml csi-sanity-parameters.yaml ${HOME}/bin/csi-sanity | kubectl exec -i -c csi-rbdplugin ${CSI_PROVISIONER_POD} -- tar x -C /tmp
+tar c csi-sanity-secrets.yaml csi-sanity-parameters.yaml "${HOME}"/bin/csi-sanity | kubectl exec -i -c csi-rbdplugin "${CSI_PROVISIONER_POD}" -- tar x -C /tmp
 
 
 # copy /usr/local/bin/csi-sanity and secrets to csi-rbdplugin pod(s)
@@ -210,22 +212,22 @@ do
 	STATUS_PHASE=$(kubectl get pods -l app=csi-rbdplugin -ojsonpath='{.items[0].status.phase}')
 done
 
-tar c csi-sanity-secrets.yaml csi-sanity-parameters.yaml ${HOME}/bin/csi-sanity | kubectl exec -i -c csi-rbdplugin ${CSI_NODE_POD} -- tar x -C /tmp
+tar c csi-sanity-secrets.yaml csi-sanity-parameters.yaml "${HOME}"/bin/csi-sanity | kubectl exec -i -c csi-rbdplugin "${CSI_NODE_POD}" -- tar x -C /tmp
 
 
 # finally run the csi-sanity tests
 FAILURES=0
 
-if ! kubectl exec -t -c csi-rbdplugin ${CSI_PROVISIONER_POD} -- /tmp/$HOME/bin/csi-sanity --csi.endpoint=/csi/csi-provisioner.sock --csi.secrets=/tmp/csi-sanity-secrets.yaml --csi.testvolumeparameters=/tmp/csi-sanity-parameters.yaml
+if ! kubectl exec -t -c csi-rbdplugin "${CSI_PROVISIONER_POD}" -- /tmp/"$HOME"/bin/csi-sanity --csi.endpoint=/csi/csi-provisioner.sock --csi.secrets=/tmp/csi-sanity-secrets.yaml --csi.testvolumeparameters=/tmp/csi-sanity-parameters.yaml
 then
-	kubectl logs -c csi-rbdplugin ${CSI_PROVISIONER_POD}
-	FAILURES=$[ FAILURES + 1 ]
+	kubectl logs -c csi-rbdplugin "${CSI_PROVISIONER_POD}"
+	FAILURES=$(( FAILURES + 1 ))
 fi
 
-if ! kubectl exec -t -c csi-rbdplugin ${CSI_NODE_POD} -- /tmp/$HOME/bin/csi-sanity --csi.endpoint=/csi/csi.sock --csi.secrets=/tmp/csi-sanity-secrets.yaml --csi.testvolumeparameters=/tmp/csi-sanity-parameters.yaml
+if ! kubectl exec -t -c csi-rbdplugin "${CSI_NODE_POD}" -- /tmp/"$HOME"/bin/csi-sanity --csi.endpoint=/csi/csi.sock --csi.secrets=/tmp/csi-sanity-secrets.yaml --csi.testvolumeparameters=/tmp/csi-sanity-parameters.yaml
 then
-	kubectl logs -c csi-rbdplugin ${CSI_NODE_POD}
-	FAILURES=$[ FAILURES + 2 ]
+	kubectl logs -c csi-rbdplugin "${CSI_NODE_POD}"
+	FAILURES=$(( FAILURES + 2 ))
 fi
 
 
