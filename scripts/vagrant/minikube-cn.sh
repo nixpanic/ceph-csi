@@ -54,10 +54,10 @@ cd $GOPATH/src/github.com/ceph
 git clone https://github.com/ceph/cn
 cd cn
 make
-install -D cn $HOME/bin/cn
+install -D cn "$HOME"/bin/cn
 
-mkdir -p $GOPATH/src/github.com/kubernetes-csi
-cd $GOPATH/src/github.com/kubernetes-csi
+mkdir -p "$GOPATH"/src/github.com/kubernetes-csi
+cd "$GOPATH"/src/github.com/kubernetes-csi
 git clone https://github.com/kubernetes-csi/csi-test
 cd csi-test
 # TODO: apply some Work-In-Progress fixes
@@ -65,7 +65,7 @@ git config --global user.name "csi-sanity for Ceph-CSI"
 git config --global user.email "noreply@example.net"
 curl 'https://github.com/kubernetes-csi/csi-test/compare/master...nixpanic:misc-fixes.patch' | git am
 make build-sanity
-install -D cmd/csi-sanity/csi-sanity $HOME/bin/csi-sanity
+install -D cmd/csi-sanity/csi-sanity "$HOME"/bin/csi-sanity
 
 ###
 ### Installation of tools finished, start deployment
@@ -76,10 +76,10 @@ sudo /usr/local/bin/minikube start --vm-driver=none
 
 # download kubectl and setup access for local user
 KUBE_VERSION=$(sudo /usr/local/bin/minikube kubectl version -- --client -o yaml | awk '/gitVersion:/{print $2}')
-sudo cp /root/.minikube/cache/${KUBE_VERSION}/kubectl /usr/local/bin/
-sudo cp -r /root/.kube /root/.minikube $HOME
-sudo chown $USER -R $HOME/.kube $HOME/.minikube
-sed "s|/root/|$HOME/|g" -i $HOME/.kube/config
+sudo cp /root/.minikube/cache/"${KUBE_VERSION}"/kubectl /usr/local/bin/
+sudo cp -r /root/.kube /root/.minikube "$HOME"
+sudo chown "$USER" -R "$HOME"/.kube "$HOME"/.minikube
+sed "s|/root/|$HOME/|g" -i "$HOME"/.kube/config
 kubectl version
 
 # show the version, might dump some non-yaml to stdout
