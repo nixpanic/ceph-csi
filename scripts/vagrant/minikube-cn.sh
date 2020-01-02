@@ -31,14 +31,20 @@ curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-
 #curl -L https://github.com/ceph/cn/releases/download/v2.3.1/cn-v2.3.1-linux-amd64 -o cn && chmod +x cn
 
 sudo yum -y install \
+	git \
 	make \
 	gcc \
 	epel-release \
 	; # empty line for 'git blame'
 
-sudo yum -y install \
-	golang \
-	; # empty line for 'git blame'
+#sudo yum -y install \
+#	golang \
+#	; # empty line for 'git blame'
+# install Go from https://go-repo.io/ as golang-1.13 does not work with the e2e tests
+sudo rpm --import https://mirror.go-repo.io/centos/RPM-GPG-KEY-GO-REPO
+curl -s https://mirror.go-repo.io/centos/go-repo.repo | sudo tee /etc/yum.repos.d/go-repo.repo
+sudo yum -y install golang-1.12 || sudo yum -y downgrade golang-1.12
+
 
 export GOPATH=~/go
 export PATH=$PATH:~/go/bin
