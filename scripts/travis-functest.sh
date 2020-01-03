@@ -4,7 +4,7 @@ set -e
 # This script will be used by travis to run functional test
 # against different kuberentes version
 export KUBE_VERSION=$1
-sudo scripts/minikube.sh up
+sudo bash scripts/minikube.sh up
 sudo scripts/minikube.sh deploy-rook
 # pull docker images to speed up e2e
 sudo scripts/minikube.sh cephcsi
