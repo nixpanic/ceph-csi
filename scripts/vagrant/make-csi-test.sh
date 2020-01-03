@@ -6,6 +6,7 @@ vagrant up
 cat << EOF | vagrant ssh -c 'sudo tee -a /etc/environment'
 export PATH=${PATH}:/usr/local/bin:~/go/bin
 export VM_DRIVER=none
+export KUBECONFIG=/opt/kube/config
 EOF
 
 ( cd ../.. ; git archive --format=tar --prefix=go/src/github.com/ceph/ceph-csi/ HEAD ) | vagrant ssh -c 'tar x'
