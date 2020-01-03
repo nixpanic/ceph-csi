@@ -50,6 +50,12 @@ sudo sysctl -w net.bridge.bridge-nf-call-iptables=1
 sudo systemctl enable docker
 sudo systemctl start docker
 
+# TODO: build ceph-csi container and push to local docker registry
+# needs sudo as it pushes the images to the (docker) registry
+#make image-cephcsi CONTAINER_CMD='sudo docker'
+sudo docker pull quay.io/nixpanic/cephcsi:wip_rbd_go-ceph
+sudo docker tag quay.io/nixpanic/cephcsi:wip_rbd_go-ceph quay.io/cephcsi/cephcsi:canary
+
 scl enable rh-ruby26 'gem install mdl'
 curl -L https://git.io/get_helm.sh | bash
 go get github.com/securego/gosec/cmd/gosec
