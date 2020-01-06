@@ -4,9 +4,10 @@ vagrant up
 # add ~/go/bin to the path
 # shellcheck disable=SC2016
 cat << EOF | vagrant ssh -c 'sudo tee -a /etc/environment'
-export PATH=${PATH}:/usr/local/bin:~/go/bin
-export VM_DRIVER=none
-export KUBECONFIG=/opt/kube/config
+PATH=\${PATH}:/usr/local/bin
+VM_DRIVER=none
+#CONTAINER_RUNTIME=cri-o
+KUBECONFIG=/opt/kube/config
 EOF
 
 ( cd ../.. ; git archive --format=tar --prefix=go/src/github.com/ceph/ceph-csi/ HEAD ) | vagrant ssh -c 'tar x'

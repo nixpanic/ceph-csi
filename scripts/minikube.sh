@@ -66,6 +66,7 @@ MINIKUBE_VERSION=${MINIKUBE_VERSION:-"latest"}
 KUBE_VERSION=${KUBE_VERSION:-"v1.14.10"}
 MEMORY=${MEMORY:-"3000"}
 VM_DRIVER=${VM_DRIVER:-"virtualbox"}
+CONTAINER_RUNTIME=${CONTAINER_RUNTIME:-"docker"}
 #configure image repo
 CEPHCSI_IMAGE_REPO=${CEPHCSI_IMAGE_REPO:-"quay.io/cephcsi"}
 K8S_IMAGE_REPO=${K8S_IMAGE_REPO:-"quay.io/k8scsi"}
@@ -94,7 +95,7 @@ up)
 
     echo "starting minikube with kubeadm bootstrapper"
     # shellcheck disable=SC2086
-    minikube start --memory="${MEMORY}" -b kubeadm --kubernetes-version="${KUBE_VERSION}" --vm-driver="${VM_DRIVER}" --feature-gates="${K8S_FEATURE_GATES}" ${EXTRA_CONFIG}
+    minikube start --memory="${MEMORY}" -b kubeadm --kubernetes-version="${KUBE_VERSION}" --vm-driver="${VM_DRIVER}" --container-runtime="${CONTAINER_RUNTIME}"--feature-gates="${K8S_FEATURE_GATES}" ${EXTRA_CONFIG}
 
     # create a link so the default dataDirHostPath will work for this
     # environment

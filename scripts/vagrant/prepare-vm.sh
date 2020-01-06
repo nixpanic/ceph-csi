@@ -32,23 +32,23 @@ sudo yum -y install \
 
 # minikube dependencies
 sudo yum -y install \
-	docker \
+	podman-docker \
 	/usr/bin/socat \
 	; # empty line for 'git blame'
 
-sed 's/native.cgroupdriver=systemd/native.cgroupdriver=cgroupfs/' /usr/lib/systemd/system/docker.service | sudo tee /etc/systemd/system/docker.service
-sudo systemctl daemon-reload
+#sed 's/native.cgroupdriver=systemd/native.cgroupdriver=cgroupfs/' /usr/lib/systemd/system/docker.service | sudo tee /etc/systemd/system/docker.service
+#sudo systemctl daemon-reload
 
 # docker bridge IP
-sudo hostnamectl set-hostname minikube
-echo '172.17.0.1  minikube' | sudo tee /etc/hosts
+#sudo hostnamectl set-hostname minikube
+#echo '172.17.0.1  minikube' | sudo tee /etc/hosts
 
 sudo setenforce 0
 sudo swapoff --all
 sudo modprobe br_netfilter
 sudo sysctl -w net.bridge.bridge-nf-call-iptables=1
-sudo systemctl enable docker
-sudo systemctl start docker
+#sudo systemctl enable docker
+#sudo systemctl start docker
 
 # TODO: build ceph-csi container and push to local docker registry
 # needs sudo as it pushes the images to the (docker) registry
@@ -56,7 +56,7 @@ sudo systemctl start docker
 sudo docker pull quay.io/nixpanic/cephcsi:wip_rbd_go-ceph
 sudo docker tag quay.io/nixpanic/cephcsi:wip_rbd_go-ceph quay.io/cephcsi/cephcsi:canary
 
-scl enable rh-ruby26 'gem install mdl'
-curl -L https://git.io/get_helm.sh | bash
-go get github.com/securego/gosec/cmd/gosec
-go get github.com/golang/dep/cmd/dep
+#scl enable rh-ruby26 'gem install mdl'
+#curl -L https://git.io/get_helm.sh | bash
+#go get github.com/securego/gosec/cmd/gosec
+#go get github.com/golang/dep/cmd/dep
