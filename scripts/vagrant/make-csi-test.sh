@@ -4,7 +4,6 @@ vagrant up
 # add ~/go/bin to the path
 # shellcheck disable=SC2016
 cat << EOF | vagrant ssh -c 'sudo tee -a /etc/environment'
-PATH=\${PATH}:/usr/local/bin
 VM_DRIVER=none
 #CONTAINER_RUNTIME=cri-o
 KUBECONFIG=/opt/kube/config
