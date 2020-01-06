@@ -5,6 +5,7 @@ set -e
 # against different kuberentes version
 export KUBE_VERSION=$1
 
+sudo scripts/minikube.sh install
 scripts/minikube.sh up
 scripts/minikube.sh deploy-rook
 # pull docker images to speed up e2e

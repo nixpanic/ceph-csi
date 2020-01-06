@@ -83,7 +83,7 @@ K8S_FEATURE_GATES=${K8S_FEATURE_GATES:-"BlockVolume=true,CSIBlockVolume=true,Vol
 EXTRA_CONFIG=${EXTRA_CONFIG:-"--extra-config=apiserver.enable-admission-plugins=PodSecurityPolicy"}
 
 case "${1:-}" in
-up)
+install)
     install_minikube
     #if driver  is 'none' install kubectl with KUBE_VERSION
     if [[ "${VM_DRIVER}" == "none" ]]; then
@@ -93,6 +93,7 @@ up)
 
     enable_psp
 
+up)
     echo "starting minikube with kubeadm bootstrapper"
     # shellcheck disable=SC2086
     minikube start --memory="${MEMORY}" -b kubeadm --kubernetes-version="${KUBE_VERSION}" --vm-driver="${VM_DRIVER}" --container-runtime="${CONTAINER_RUNTIME}"--feature-gates="${K8S_FEATURE_GATES}" ${EXTRA_CONFIG}
