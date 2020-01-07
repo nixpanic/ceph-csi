@@ -37,6 +37,18 @@
   version = "v1.0.1"
 
 [[projects]]
+  branch = "master"
+  digest = "1:0b61293018fb129e915e0cf62b15990c2f022cadb90b2b8b423be89e549502a0"
+  name = "github.com/ceph/go-ceph"
+  packages = [
+    "errutil",
+    "rados",
+    "rbd",
+  ]
+  pruneopts = "NUT"
+  revision = "6c949c1954366f5fe2c3ab9204bef2d3e4d81412"
+
+[[projects]]
   digest = "1:7f21fa1f8ab9a529dba26a7e9cf20de217c307fa1d96cb599d3afd9e5c83e9d6"
   name = "github.com/container-storage-interface/spec"
   packages = ["lib/go/csi"]
@@ -1350,6 +1362,8 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
+    "github.com/ceph/go-ceph/rados",
+    "github.com/ceph/go-ceph/rbd",
     "github.com/container-storage-interface/spec/lib/go/csi",
     "github.com/golang/protobuf/ptypes",
     "github.com/golang/protobuf/ptypes/timestamp",
@@ -1376,11 +1390,11 @@
     "k8s.io/apimachinery/pkg/api/errors",
     "k8s.io/apimachinery/pkg/api/resource",
     "k8s.io/apimachinery/pkg/apis/meta/v1",
+    "k8s.io/apimachinery/pkg/fields",
     "k8s.io/apimachinery/pkg/util/sets",
     "k8s.io/apimachinery/pkg/util/validation",
     "k8s.io/apimachinery/pkg/util/wait",
     "k8s.io/apimachinery/pkg/util/yaml",
-    "k8s.io/apimachinery/pkg/fields",
     "k8s.io/client-go/kubernetes",
     "k8s.io/client-go/rest",
     "k8s.io/client-go/tools/clientcmd",
