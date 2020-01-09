@@ -59,6 +59,8 @@ const (
 	// Encryption statuses for RbdImage
 	rbdImageEncrypted          = "encrypted"
 	rbdImageRequiresEncryption = "requiresEncryption"
+	// image metadata key for encryption
+	encryptionMetaKey = ".rbd.csi.ceph.com/encrypted"
 )
 
 // rbdVolume represents a CSI volume and its RBD image specifics
@@ -983,21 +985,23 @@ func (rv *rbdVolume) SetMetadata(key, value string) error {
 	return image.SetMetadata(key, value)
 }
 
-func (rbdVol *rbdVolume) ensureEncryptionMetadataSet(ctx context.Context) error {
-	var vi util.CSIIdentifier
-
-	err := vi.DecomposeCSIID(rbdVol.VolID)
+// checkRbdImageEncrypted verifies if rbd image was encrypted when created
+func (rv *rbdVolume) checkRbdImageEncrypted(ctx context.Context) (string, error) {
+	value, err := rv.GetMetadata(encryptionMetaKey)
 	if err != nil {
-		err = fmt.Errorf("error decoding volume ID (%s) (%s)", rbdVol.VolID, err)
-		return ErrInvalidVolID{err}
+		klog.Errorf(util.Log(ctx, "checking image %s encrypted state metadata failed: %s"), rv.RbdImageName, err)
+		return "", err
 	}
 
-	rbdImageName := volJournal.GetNameForUUID(rbdVol.NamePrefix, vi.ObjectUUID, false)
-	imageSpec := rbdVol.Pool + "/" + rbdImageName
+	encrypted := strings.TrimSpace(value)
+	klog.V(4).Infof(util.Log(ctx, "image %s encrypted state metadata reports %q"), rv.RbdImageName, encrypted)
+	return encrypted, nil
+}
 
-	err = util.SaveRbdImageEncryptionStatus(ctx, rbdVol.Creds, rbdVol.Monitors, imageSpec, rbdImageRequiresEncryption)
+func (rv *rbdVolume) ensureEncryptionMetadataSet(status string) error {
+	err := rv.SetMetadata(encryptionMetaKey, status)
 	if err != nil {
-		return fmt.Errorf("failed to save encryption status for %s: %v", imageSpec, err)
+		return fmt.Errorf("failed to save encryption status for %s: %v", rv.RbdImageName, err)
 	}
 
 	return nil
