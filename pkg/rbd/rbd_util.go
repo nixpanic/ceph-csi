@@ -144,7 +144,12 @@ func createImage(ctx context.Context, pOpts *rbdVolume, volSz int64, cr *util.Cr
 			"ignored"), pOpts.ImageFeatures)
 	}
 
-	ioctx, err := pOpts.getIoctx(cr)
+	err = pOpts.Connect(cr)
+	if err != nil {
+		return err
+	}
+
+	ioctx, err := pOpts.getIoctx()
 	if err != nil {
 		return err
 	}
@@ -160,25 +165,55 @@ func createImage(ctx context.Context, pOpts *rbdVolume, volSz int64, cr *util.Cr
 	return nil
 }
 
-func (rv *rbdVolume) getIoctx(cr *util.Credentials) (*rados.IOContext, error) {
+// rbdVol.Connect() connects to the Ceph cluster and sets rbdVol.conn for further usage.
+func (rv *rbdVolume) Connect(cr *util.Credentials) error {
 	if rv.connKey == "" {
 		conn, key, err := connPool.Get(rv.Pool, rv.Monitors, cr.KeyFile)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		rv.conn = conn
 		rv.connKey = key
 	}
 
+	return nil
+}
+
+func (rv *rbdVolume) getIoctx() (*rados.IOContext, error) {
+	if rv.conn == nil {
+		return nil, fmt.Errorf("rbdVolume \"%s\" is not connected", rv.RbdImageName)
+	}
+
 	ioctx, err := rv.conn.OpenIOContext(rv.Pool)
 	if err != nil {
-		connPool.Put(rv.connKey)
-		rv.connKey = ""
 		return nil, err
 	}
 
 	return ioctx, nil
+}
+
+// Open the rbdVolume after it has been connected.
+func (rv *rbdVolume) open() (*librbd.Image, error) {
+	if rv.RbdImageName == "" {
+		rbdImageName, err := getVolumeName(rv.VolID)
+		if err != nil {
+			return nil, err
+		}
+		rv.RbdImageName = rbdImageName
+	}
+
+	ioctx, err := rv.getIoctx()
+	if err != nil {
+		return nil, err
+	}
+
+	image := librbd.GetImage(ioctx, rv.RbdImageName)
+	err = image.Open()
+	if err != nil {
+		return nil, err
+	}
+	return image, nil
 }
 
 func (rv *rbdVolume) Destroy() {
@@ -267,8 +302,13 @@ func deleteImage(ctx context.Context, pOpts *rbdVolume, cr *util.Credentials) er
 	// attempt to use Ceph manager based deletion support if available
 	rbdCephMgrSupported, err := rbdManagerTaskDeleteImage(ctx, pOpts, cr)
 	if !rbdCephMgrSupported {
+		err = pOpts.Connect(cr)
+		if err != nil {
+			return err
+		}
+
 		var ioctx *rados.IOContext
-		ioctx, err = pOpts.getIoctx(cr)
+		ioctx, err = pOpts.getIoctx()
 		if err != nil {
 			return err
 		}
