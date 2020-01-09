@@ -953,7 +953,37 @@ func resizeRBDImage(rbdVol *rbdVolume, cr *util.Credentials) error {
 	return nil
 }
 
-func ensureEncryptionMetadataSet(ctx context.Context, cr *util.Credentials, rbdVol *rbdVolume) error {
+func (rv *rbdVolume) GetMetadata(key string) (string, error) {
+	ioctx, err := rv.GetIoctx(rv.Pool)
+	if err != nil {
+		return "", errors.Wrapf(err, "failed to get ioctx for \"%s\"", rv.RbdImageName)
+	}
+
+	image, err := librbd.OpenImage(ioctx, rv.RbdImageName, librbd.NoSnapshot)
+	if err != nil {
+		return "", errors.Wrapf(err, "could not open image \"%s\"", rv.RbdImageName)
+	}
+	defer image.Close()
+
+	return image.GetMetadata(key)
+}
+
+func (rv *rbdVolume) SetMetadata(key, value string) error {
+	ioctx, err := rv.GetIoctx(rv.Pool)
+	if err != nil {
+		return errors.Wrapf(err, "failed to get ioctx for \"%s\"", rv.RbdImageName)
+	}
+
+	image, err := librbd.OpenImage(ioctx, rv.RbdImageName, librbd.NoSnapshot)
+	if err != nil {
+		return errors.Wrapf(err, "could not open image \"%s\"", rv.RbdImageName)
+	}
+	defer image.Close()
+
+	return image.SetMetadata(key, value)
+}
+
+func (rbdVol *rbdVolume) ensureEncryptionMetadataSet(ctx context.Context) error {
 	var vi util.CSIIdentifier
 
 	err := vi.DecomposeCSIID(rbdVol.VolID)
@@ -965,7 +995,7 @@ func ensureEncryptionMetadataSet(ctx context.Context, cr *util.Credentials, rbdV
 	rbdImageName := volJournal.GetNameForUUID(rbdVol.NamePrefix, vi.ObjectUUID, false)
 	imageSpec := rbdVol.Pool + "/" + rbdImageName
 
-	err = util.SaveRbdImageEncryptionStatus(ctx, cr, rbdVol.Monitors, imageSpec, rbdImageRequiresEncryption)
+	err = util.SaveRbdImageEncryptionStatus(ctx, rbdVol.Creds, rbdVol.Monitors, imageSpec, rbdImageRequiresEncryption)
 	if err != nil {
 		return fmt.Errorf("failed to save encryption status for %s: %v", imageSpec, err)
 	}
