@@ -42,7 +42,6 @@ import (
 
 const (
 	imageWatcherStr = "watcher="
-	rbdImageFormat2 = 2
 	// The following three values are used for 30 seconds timeout
 	// while waiting for RBD Watcher to expire.
 	rbdImageWatcherInitDelay = 1 * time.Second
@@ -76,7 +75,6 @@ type rbdVolume struct {
 	Monitors           string `json:"monitors"`
 	Pool               string `json:"pool"`
 	DataPool           string
-	ImageFormat        string `json:"imageFormat"`
 	ImageFeatures      string `json:"imageFeatures"`
 	AdminID            string `json:"adminId"`
 	UserID             string `json:"userId"`
@@ -128,30 +126,16 @@ func createImage(ctx context.Context, pOpts *rbdVolume, volSz int64, cr *util.Cr
 	volSzMiB := fmt.Sprintf("%dM", volSz)
 	options := librbd.NewRbdImageOptions()
 
-	var err error
-	imageFormat := rbdImageFormat2
-	if pOpts.ImageFormat != "" {
-		imageFormat, err = strconv.Atoi(pOpts.ImageFormat)
-		if err != nil {
-			return errors.Wrapf(err, "failed to convert ImageFormat (%v) to integer", pOpts.ImageFormat)
-		}
-	}
-
-	err = options.SetUint64(librbd.RbdImageOptionFormat, uint64(imageFormat))
-	if err != nil {
-		return errors.Wrapf(err, "failed to set ImageFormat to %v", imageFormat)
-	}
-
-	logMsg := "rbd: create %s size %s format %d (features: %s) using mon %s, pool %s "
+	logMsg := "rbd: create %s size %s (features: %s) using mon %s, pool %s "
 	if pOpts.DataPool != "" {
 		logMsg += fmt.Sprintf("data pool %s", pOpts.DataPool)
-		err = options.SetString(librbd.RbdImageOptionDataPool, pOpts.DataPool)
+		err := options.SetString(librbd.RbdImageOptionDataPool, pOpts.DataPool)
 		if err != nil {
 			return err
 		}
 	}
 	klog.V(4).Infof(util.Log(ctx, logMsg),
-		pOpts.RbdImageName, volSzMiB, imageFormat, pOpts.ImageFeatures, pOpts.Monitors, pOpts.Pool)
+		pOpts.RbdImageName, volSzMiB, pOpts.ImageFeatures, pOpts.Monitors, pOpts.Pool)
 
 	if pOpts.ImageFeatures != "" {
 		// TODO: parse imagefeatures and set RbdImageOptionFeatures
@@ -327,12 +311,6 @@ func updateVolWithImageInfo(ctx context.Context, rbdVol *rbdVolume, cr *util.Cre
 	if err != nil {
 		return err
 	}
-
-	if imageInfo.Format != 2 {
-		return fmt.Errorf("unknown or unsupported image format (%d) returned for image (%s)",
-			imageInfo.Format, rbdVol.RbdImageName)
-	}
-	rbdVol.ImageFormat = strconv.Itoa(rbdImageFormat2)
 
 	rbdVol.VolSize = imageInfo.Size
 	rbdVol.ImageFeatures = strings.Join(imageInfo.Features, ",")
@@ -535,7 +513,7 @@ func genVolFromVolumeOptions(ctx context.Context, volOptions, credentials map[st
 	}
 
 	// if no image features is provided, it results in empty string
-	// which disable all RBD image format 2 features as we expected
+	// which disable all RBD image features as we expected
 
 	imageFeatures, found := volOptions["imageFeatures"]
 	if found {
@@ -725,7 +703,6 @@ func getSnapshotMetadata(ctx context.Context, pSnapOpts *rbdSnapshot, cr *util.C
 type imageInfo struct {
 	ObjectUUID string   `json:"name"`
 	Size       int64    `json:"size"`
-	Format     int64    `json:"format"`
 	Features   []string `json:"features"`
 	CreatedAt  string   `json:"create_timestamp"`
 }
