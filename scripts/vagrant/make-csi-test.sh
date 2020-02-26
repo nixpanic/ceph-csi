@@ -13,8 +13,8 @@ EOF
 
 ( cd ../.. ; git archive --format=tar --prefix=go/src/github.com/ceph/ceph-csi/ HEAD ) | vagrant ssh -c 'sudo mkdir /go && sudo chown vagrant:vagrant /go && tar x -C /'
 vagrant ssh -c 'cd /go/src/github.com/ceph/ceph-csi && ./scripts/vagrant/prepare-vm.sh'
-#vagrant ssh -c 'cd go/src/github.com/ceph/ceph-csi && ./scripts/vagrant/minikube-cn.sh'
-vagrant ssh -c 'cd /go/src/github.com/ceph/ceph-csi && VM_DRIVER=none ./scripts/travis-functest.sh'
+vagrant ssh -c 'cd /go/src/github.com/ceph/ceph-csi && ./scripts/vagrant/minikube-cn.sh'
+#vagrant ssh -c 'cd /go/src/github.com/ceph/ceph-csi && VM_DRIVER=none ./scripts/travis-functest.sh'
 RET=$?
 
 if [ -z "${CEPHCSI_KEEP_VM}" ]
