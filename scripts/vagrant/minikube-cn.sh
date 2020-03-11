@@ -84,7 +84,7 @@ sudo /usr/local/bin/minikube start --vm-driver=none
 
 # download kubectl and setup access for local user
 KUBE_VERSION=$(sudo /usr/local/bin/minikube kubectl version -- --client -o yaml | awk '/gitVersion:/{print $2}')
-sudo cp /root/.minikube/cache/"${KUBE_VERSION}"/kubectl /usr/local/bin/
+sudo cp /root/.minikube/cache/linux/"${KUBE_VERSION}"/kubectl /usr/local/bin/
 sudo cp -r /root/.kube /root/.minikube "$HOME"
 sudo chown "$USER" -R "$HOME"/.kube "$HOME"/.minikube
 sed "s|/root/|$HOME/|g" -i "$HOME"/.kube/config
