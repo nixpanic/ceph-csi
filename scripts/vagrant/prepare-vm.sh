@@ -16,7 +16,7 @@ sudo yum -y install \
 	gcc \
 	; # empty line for 'git blame'
 
-# make the golang scl available
+# make the rh-ruby26 scl available
 sudo yum -y install centos-release-scl epel-release
 
 # install Go from https://go-repo.io/ as golang-1.13 does not work with the e2e tests
