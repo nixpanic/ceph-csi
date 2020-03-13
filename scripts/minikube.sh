@@ -93,7 +93,6 @@ up)
 
     enable_psp
 
-up)
     echo "starting minikube with kubeadm bootstrapper"
     # shellcheck disable=SC2086
     minikube start --memory="${MEMORY}" -b kubeadm --kubernetes-version="${KUBE_VERSION}" --vm-driver="${VM_DRIVER}" --container-runtime="${CONTAINER_RUNTIME}" --feature-gates="${K8S_FEATURE_GATES}" ${EXTRA_CONFIG}
