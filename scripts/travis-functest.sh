@@ -10,6 +10,14 @@ sudo scripts/minikube.sh deploy-rook
 # pull docker images to speed up e2e
 sudo scripts/minikube.sh cephcsi
 sudo scripts/minikube.sh k8s-sidecar
+
+# download kubectl and setup access for local user
+sudo cp /root/.minikube/cache/linux/"${KUBE_VERSION}"/kubectl /usr/local/bin/
+sudo cp -r /root/.minikube /opt/minikube
+sed "s|/root/.minikube/|/opt/minikube/|g" -i /opt/kube/config
+sudo chown "${USER}:${GROUP}" -R /opt/minikube /opt/kube
+kubectl version
+
 # functional tests
 USE_SUDO=""
 #[ "${VM_DRIVER}" = "none" ] && USE_SUDO="sudo"
