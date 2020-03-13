@@ -15,8 +15,8 @@ sudo scripts/minikube.sh k8s-sidecar
 MK_KUBE_VERSION=$(sudo /usr/local/bin/minikube kubectl version -- --client -o yaml | awk '/gitVersion:/{print $2}')
 sudo cp /root/.minikube/cache/linux/"${MK_KUBE_VERSION}"/kubectl /usr/local/bin/
 sudo cp -r /root/.minikube /opt/minikube
-sed "s|/root/.minikube/|/opt/minikube/|g" -i /opt/kube/config
 sudo chown "${USER}:${GROUP}" -R /opt/minikube /opt/kube
+sed "s|/root/.minikube/|/opt/minikube/|g" -i /opt/kube/config
 kubectl version
 
 # functional tests
