@@ -35,7 +35,7 @@ function install_minikube() {
         version=$(minikube version)
         read -ra version <<<"${version}"
         version=${version[2]}
-        if [[ "${version}" != "${MINIKUBE_VERSION}" ]]; then
+        if [[ "${version}" != "${MINIKUBE_VERSION}" ]] && [[ "${MINIKUBE_VERSION}" != "latest" ]]; then
             echo "installed minikube version ${version} is not matching requested version ${MINIKUBE_VERSION}"
             exit 1
         fi
@@ -94,6 +94,7 @@ up)
     enable_psp
 
     echo "starting minikube with kubeadm bootstrapper"
+    minikube addons disable storage-provisioner
     # shellcheck disable=SC2086
     minikube start --memory="${MEMORY}" -b kubeadm --kubernetes-version="${KUBE_VERSION}" --vm-driver="${VM_DRIVER}" --container-runtime="${CONTAINER_RUNTIME}" --feature-gates="${K8S_FEATURE_GATES}" ${EXTRA_CONFIG}
 
