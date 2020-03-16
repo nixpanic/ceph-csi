@@ -54,8 +54,8 @@ go get github.com/golang/dep/cmd/dep
 # TODO: build ceph-csi container and push to local docker registry
 # needs sudo as it pushes the images to the (docker) registry
 #make image-cephcsi CONTAINER_CMD='sudo docker'
-sudo docker pull quay.io/nixpanic/cephcsi:wip_rbd_go-ceph
-sudo docker tag quay.io/nixpanic/cephcsi:wip_rbd_go-ceph quay.io/cephcsi/cephcsi:canary
+sudo docker pull quay.io/nixpanic/cephcsi:testing_rbd_go-ceph_delete
+sudo docker tag quay.io/nixpanic/cephcsi:testing_rbd_go-ceph_delete quay.io/cephcsi/cephcsi:canary
 
 mkdir -p $GOPATH/src/github.com/ceph
 cd $GOPATH/src/github.com/ceph
