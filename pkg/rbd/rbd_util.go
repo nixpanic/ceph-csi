@@ -253,8 +253,6 @@ func rbdManagerTaskDeleteImage(ctx context.Context, pOpts *rbdVolume, cr *util.C
 
 // deleteImage deletes a ceph image with provision and volume options.
 func deleteImage(ctx context.Context, pOpts *rbdVolume, cr *util.Credentials) error {
-	var output []byte
-
 	image := pOpts.RbdImageName
 	found, _, err := rbdStatus(ctx, pOpts, cr)
 	if err != nil {
@@ -275,12 +273,16 @@ func deleteImage(ctx context.Context, pOpts *rbdVolume, cr *util.Credentials) er
 	}
 
 	if !rbdCephMgrSupported {
-		// attempt older style deletion
-		args := []string{"rm", image, "--pool", pOpts.Pool, "--id", cr.ID, "-m", pOpts.Monitors,
-			"--keyfile=" + cr.KeyFile}
-		output, err = execCommand("rbd", args)
+		ioctx, err := pOpts.getIoctx(cr)
 		if err != nil {
-			klog.Errorf(util.Log(ctx, "failed to delete rbd image: %s/%s, error: %v, command output: %s"), pOpts.Pool, image, err, string(output))
+			return err
+		}
+		defer ioctx.Destroy()
+
+		image := librbd.GetImage(ioctx, pOpts.RbdImageName)
+		err = image.Remove()
+		if err != nil {
+			klog.Errorf(util.Log(ctx, "failed to delete rbd image: %s/%s, error: %v"), pOpts.Pool, image, err)
 		}
 	}
 
