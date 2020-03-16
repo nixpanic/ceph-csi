@@ -269,10 +269,10 @@ func deleteImage(ctx context.Context, pOpts *rbdVolume, cr *util.Credentials) er
 	rbdCephMgrSupported, err := rbdManagerTaskDeleteImage(ctx, pOpts, cr)
 	if rbdCephMgrSupported && err != nil {
 		klog.Errorf(util.Log(ctx, "failed to add task to delete rbd image: %s/%s, %v"), pOpts.Pool, image, err)
-		return err
+		// fall through and try inline deletion
 	}
 
-	if !rbdCephMgrSupported {
+	if !rbdCephMgrSupported || err != nil {
 		ioctx, err := pOpts.getIoctx(cr)
 		if err != nil {
 			return err
