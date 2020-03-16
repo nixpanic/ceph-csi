@@ -53,8 +53,8 @@ sudo systemctl start docker
 # TODO: build ceph-csi container and push to local docker registry
 # needs sudo as it pushes the images to the (docker) registry
 #make image-cephcsi CONTAINER_CMD='sudo docker'
-sudo docker pull quay.io/nixpanic/cephcsi:testing_rbd_go-ceph_delete
-sudo docker tag quay.io/nixpanic/cephcsi:testing_rbd_go-ceph_delete quay.io/cephcsi/cephcsi:canary
+sudo docker pull quay.io/nixpanic/cephcsi:testing_rbd_go-ceph_metadata
+sudo docker tag quay.io/nixpanic/cephcsi:testing_rbd_go-ceph_metadata quay.io/cephcsi/cephcsi:canary
 
 #scl enable rh-ruby26 'gem install mdl'
 #curl -L https://git.io/get_helm.sh | bash
