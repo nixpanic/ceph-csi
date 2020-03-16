@@ -102,6 +102,9 @@ do
 	sleep 10
 done
 
+cd ${GOPATH}/src/github.com/ceph/ceph-csi/examples/kms/vault
+kubectl apply -f kms-config.yaml
+
 cd ${GOPATH}/src/github.com/ceph/ceph-csi/examples/rbd
 sed 's/<plaintext ID>/admin/' -i secret.yaml
 ADMIN_KEY=$(kubectl exec -t ceph-nano-0 -- /usr/bin/ceph auth get client.admin | awk '/key =/{print $3}')
