@@ -86,8 +86,8 @@ sudo /usr/local/bin/minikube start --vm-driver=none
 KUBE_VERSION=$(sudo /usr/local/bin/minikube kubectl version -- --client -o yaml | awk '/gitVersion:/{print $2}')
 sudo cp /root/.minikube/cache/linux/"${KUBE_VERSION}"/kubectl /usr/local/bin/
 sudo cp -r /root/.minikube /opt/minikube
-sed "s|/root/.minikube/|/opt/minikube/|g" -i /opt/kube/config
 sudo chown "${USER}:${GROUP}" -R /opt/minikube /opt/kube
+sed "s|/root/.minikube/|/opt/minikube/|g" -i /opt/kube/config
 kubectl version
 
 # show the version, might dump some non-yaml to stdout
