@@ -783,7 +783,7 @@ func (cs *ControllerServer) ControllerExpandVolume(ctx context.Context, req *csi
 		klog.V(4).Infof(util.Log(ctx, "rbd volume %s/%s size is %v,resizing to %v"), rbdVol.Pool, rbdVol.RbdImageName, rbdVol.VolSize, volSize)
 		rbdVol.VolSize = volSize
 		nodeExpansion = true
-		err = resizeRBDImage(rbdVol, cr)
+		err = rbdVol.resizeRBDImage()
 		if err != nil {
 			klog.Errorf(util.Log(ctx, "failed to resize rbd image: %s/%s with error: %v"), rbdVol.Pool, rbdVol.RbdImageName, err)
 			return nil, status.Error(codes.Internal, err.Error())
