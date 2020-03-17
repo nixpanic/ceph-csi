@@ -146,7 +146,13 @@ func (cs *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 	}
 	defer cs.VolumeLocks.Release(req.GetName())
 
-	found, err := checkVolExists(ctx, rbdVol, cr)
+	err = rbdVol.Connect(cr)
+	if err != nil {
+		klog.Errorf(util.Log(ctx, "failed to connect to volume %v: %v"), rbdVol.RbdImageName, err)
+		return nil, err
+	}
+
+	found, err := rbdVol.Exists(ctx)
 	if err != nil {
 		if _, ok := err.(ErrVolNameConflict); ok {
 			return nil, status.Error(codes.AlreadyExists, err.Error())

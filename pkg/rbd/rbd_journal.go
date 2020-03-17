@@ -163,7 +163,7 @@ volume names as requested by the CSI drivers. Hence, these need to be invoked on
 respective CSI snapshot or volume name based locks are held, as otherwise racy access to these
 omaps may end up leaving the omaps in an inconsistent state.
 */
-func checkVolExists(ctx context.Context, rbdVol *rbdVolume, cr *util.Credentials) (bool, error) {
+func (rbdVol *rbdVolume) Exists(ctx context.Context) (bool, error) {
 	err := validateRbdVol(rbdVol)
 	if err != nil {
 		return false, err
@@ -173,7 +173,7 @@ func checkVolExists(ctx context.Context, rbdVol *rbdVolume, cr *util.Credentials
 	if rbdVol.Encrypted {
 		kmsID = rbdVol.KMS.GetID()
 	}
-	imageUUID, err := volJournal.CheckReservation(ctx, rbdVol.Monitors, cr, rbdVol.Pool,
+	imageUUID, err := volJournal.CheckReservation(ctx, rbdVol.Monitors, rbdVol.Creds, rbdVol.Pool,
 		rbdVol.RequestName, rbdVol.NamePrefix, "", kmsID)
 	if err != nil {
 		return false, err
@@ -184,7 +184,7 @@ func checkVolExists(ctx context.Context, rbdVol *rbdVolume, cr *util.Credentials
 
 	// now that we now that the reservation exists, let's get the image name from
 	// the omap
-	_, rbdVol.RbdImageName, _, _, err = volJournal.GetObjectUUIDData(ctx, rbdVol.Monitors, cr,
+	_, rbdVol.RbdImageName, _, _, err = volJournal.GetObjectUUIDData(ctx, rbdVol.Monitors, rbdVol.Creds,
 		rbdVol.Pool, imageUUID, false)
 	if err != nil {
 		return false, err
@@ -194,10 +194,10 @@ func checkVolExists(ctx context.Context, rbdVol *rbdVolume, cr *util.Credentials
 	// save it for size checks before fetching image data
 	requestSize := rbdVol.VolSize
 	// Fetch on-disk image attributes and compare against request
-	err = updateVolWithImageInfo(ctx, rbdVol, cr)
+	err = updateVolWithImageInfo(ctx, rbdVol, rbdVol.Creds)
 	if err != nil {
 		if _, ok := err.(ErrImageNotFound); ok {
-			err = volJournal.UndoReservation(ctx, rbdVol.Monitors, cr, rbdVol.Pool,
+			err = volJournal.UndoReservation(ctx, rbdVol.Monitors, rbdVol.Creds, rbdVol.Pool,
 				rbdVol.RbdImageName, rbdVol.RequestName)
 			return false, err
 		}
@@ -213,7 +213,7 @@ func checkVolExists(ctx context.Context, rbdVol *rbdVolume, cr *util.Credentials
 	// TODO: We should also ensure image features and format is the same
 
 	// found a volume already available, process and return it!
-	rbdVol.VolID, err = util.GenerateVolID(ctx, rbdVol.Monitors, cr, rbdVol.Pool,
+	rbdVol.VolID, err = util.GenerateVolID(ctx, rbdVol.Monitors, rbdVol.Creds, rbdVol.Pool,
 		rbdVol.ClusterID, imageUUID, volIDVersion)
 	if err != nil {
 		return false, err
