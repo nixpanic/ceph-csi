@@ -358,21 +358,22 @@ func genSnapFromSnapID(ctx context.Context, rbdSnap *rbdSnapshot, snapshotID str
 
 // genVolFromVolID generates a rbdVolume structure from the provided identifier, updating
 // the structure with elements from on-disk image metadata as well
-func genVolFromVolID(ctx context.Context, rbdVol *rbdVolume, volumeID string, cr *util.Credentials, secrets map[string]string) error {
+func genVolFromVolID(ctx context.Context, volumeID string, cr *util.Credentials, secrets map[string]string) (*rbdVolume, error) {
 	var (
 		options map[string]string
 		vi      util.CSIIdentifier
+		rbdVol *rbdVolume
 	)
 	options = make(map[string]string)
 
 	// rbdVolume fields that are not filled up in this function are:
 	//		Mounter, MultiNodeWritable
-	rbdVol.VolID = volumeID
+	rbdVol = &rbdVolume{VolID: volumeID}
 
 	err := vi.DecomposeCSIID(rbdVol.VolID)
 	if err != nil {
 		err = fmt.Errorf("error decoding volume ID (%s) (%s)", err, rbdVol.VolID)
-		return ErrInvalidVolID{err}
+		return nil, ErrInvalidVolID{err}
 	}
 
 	rbdVol.ClusterID = vi.ClusterID
@@ -380,31 +381,36 @@ func genVolFromVolID(ctx context.Context, rbdVol *rbdVolume, volumeID string, cr
 
 	rbdVol.Monitors, _, err = getMonsAndClusterID(ctx, options)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	rbdVol.Pool, err = util.GetPoolName(ctx, rbdVol.Monitors, cr, vi.LocationID)
 	if err != nil {
-		return err
+		return nil, err
+	}
+
+	err = rbdVol.Connect(cr)
+	if err != nil {
+		return nil, err
 	}
 
 	kmsID := ""
 	rbdVol.RequestName, rbdVol.RbdImageName, _, kmsID, err = volJournal.GetObjectUUIDData(ctx, rbdVol.Monitors, cr,
 		rbdVol.Pool, vi.ObjectUUID, false)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if kmsID != "" {
 		rbdVol.Encrypted = true
 		rbdVol.KMS, err = util.GetKMS(kmsID, secrets)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
 	err = updateVolWithImageInfo(ctx, rbdVol, cr)
 
-	return err
+	return rbdVol, err
 }
 
 func execCommand(command string, args []string) ([]byte, error) {
