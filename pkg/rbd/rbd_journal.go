@@ -253,7 +253,7 @@ func reserveSnap(ctx context.Context, rbdSnap *rbdSnapshot, cr *util.Credentials
 
 // reserveVol is a helper routine to request a rbdVolume name reservation and generate the
 // volume ID for the generated name
-func reserveVol(ctx context.Context, rbdVol *rbdVolume, cr *util.Credentials) error {
+func (rbdVol *rbdVolume) reserveVol(ctx context.Context) error {
 	var (
 		imageUUID string
 		err       error
@@ -264,14 +264,15 @@ func reserveVol(ctx context.Context, rbdVol *rbdVolume, cr *util.Credentials) er
 		kmsID = rbdVol.KMS.GetID()
 	}
 
-	imageUUID, rbdVol.RbdImageName, err = volJournal.ReserveName(ctx, rbdVol.Monitors, cr, rbdVol.Pool,
-		rbdVol.RequestName, rbdVol.NamePrefix, "", kmsID)
+	imageUUID, rbdVol.RbdImageName, err = volJournal.ReserveName(ctx,
+		rbdVol.Monitors, rbdVol.Creds, rbdVol.Pool, rbdVol.RequestName,
+		rbdVol.NamePrefix, "", kmsID)
 	if err != nil {
 		return err
 	}
 
-	rbdVol.VolID, err = util.GenerateVolID(ctx, rbdVol.Monitors, cr, rbdVol.Pool,
-		rbdVol.ClusterID, imageUUID, volIDVersion)
+	rbdVol.VolID, err = util.GenerateVolID(ctx, rbdVol.Monitors, rbdVol.Creds,
+		rbdVol.Pool, rbdVol.ClusterID, imageUUID, volIDVersion)
 	if err != nil {
 		return err
 	}
