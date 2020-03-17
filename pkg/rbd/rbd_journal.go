@@ -292,9 +292,7 @@ func undoSnapReservation(ctx context.Context, rbdSnap *rbdSnapshot, cr *util.Cre
 }
 
 // undoVolReservation is a helper routine to undo a name reservation for rbdVolume
-func undoVolReservation(ctx context.Context, rbdVol *rbdVolume, cr *util.Credentials) error {
-	err := volJournal.UndoReservation(ctx, rbdVol.Monitors, cr, rbdVol.Pool,
-		rbdVol.RbdImageName, rbdVol.RequestName)
-
-	return err
+func (rbdVol *rbdVolume) undoVolReservation(ctx context.Context) error {
+	return volJournal.UndoReservation(ctx, rbdVol.Monitors, rbdVol.Creds,
+		rbdVol.Pool, rbdVol.RbdImageName, rbdVol.RequestName)
 }

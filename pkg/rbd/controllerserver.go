@@ -185,7 +185,7 @@ func (cs *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 	}
 	defer func() {
 		if err != nil {
-			errDefer := undoVolReservation(ctx, rbdVol, cr)
+			errDefer := rbdVol.undoVolReservation(ctx)
 			if errDefer != nil {
 				klog.Warningf(util.Log(ctx, "failed undoing reservation of volume: %s (%s)"), req.GetName(), errDefer)
 			}
@@ -405,7 +405,7 @@ func (cs *ControllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVol
 		}
 		defer cs.VolumeLocks.Release(rbdVol.RequestName)
 
-		if err = undoVolReservation(ctx, rbdVol, cr); err != nil {
+		if err = rbdVol.undoVolReservation(ctx); err != nil {
 			return nil, status.Error(codes.Internal, err.Error())
 		}
 		return &csi.DeleteVolumeResponse{}, nil
@@ -427,7 +427,7 @@ func (cs *ControllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVol
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	if err = undoVolReservation(ctx, rbdVol, cr); err != nil {
+	if err = rbdVol.undoVolReservation(ctx); err != nil {
 		klog.Errorf(util.Log(ctx, "failed to remove reservation for volume (%s) with backing image (%s) (%s)"),
 			rbdVol.RequestName, rbdVol.RbdImageName, err)
 		return nil, status.Error(codes.Internal, err.Error())
