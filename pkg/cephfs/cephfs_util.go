@@ -34,23 +34,25 @@ type CephFilesystemDetails struct {
 	MDSMap MDSMap `json:"mdsmap"`
 }
 
-func getFscID(ctx context.Context, monitors string, cr *util.Credentials, fsName string) (int64, error) {
+func (v *volumeOptions) fetchFscID(ctx context.Context) error {
 	// ceph fs get myfs --format=json
 	// {"mdsmap":{...},"id":2}
 	var fsDetails CephFilesystemDetails
 	err := execCommandJSON(ctx, &fsDetails,
 		"ceph",
-		"-m", monitors,
-		"--id", cr.ID,
-		"--keyfile="+cr.KeyFile,
+		"-m", v.Monitors,
+		"--id", v.Creds.ID,
+		"--keyfile="+v.Creds.KeyFile,
 		"-c", util.CephConfigPath,
-		"fs", "get", fsName, "--format=json",
+		"fs", "get", v.FsName, "--format=json",
 	)
 	if err != nil {
-		return 0, err
+		return err
 	}
 
-	return fsDetails.ID, nil
+	v.FscID = fsDetails.ID
+
+	return nil
 }
 
 // CephFilesystem is a representation of the json structure returned by 'ceph fs ls'

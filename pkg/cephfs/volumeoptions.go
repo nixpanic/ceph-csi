@@ -27,6 +27,8 @@ import (
 )
 
 type volumeOptions struct {
+	util.ClusterConnection
+
 	RequestName        string
 	NamePrefix         string
 	Size               int64
@@ -34,8 +36,6 @@ type volumeOptions struct {
 	FsName             string
 	FscID              int64
 	MetadataPool       string
-	Monitors           string `json:"monitors"`
-	Pool               string `json:"pool"`
 	RootPath           string `json:"rootPath"`
 	Mounter            string `json:"mounter"`
 	ProvisionVolume    bool   `json:"provisionVolume"`
@@ -133,6 +133,8 @@ func newVolumeOptions(ctx context.Context, requestName string, volOptions, secre
 		err  error
 	)
 
+	defer opts.Destroy()
+
 	opts.Monitors, opts.ClusterID, err = getMonsAndClusterID(volOptions)
 	if err != nil {
 		return nil, err
@@ -166,7 +168,12 @@ func newVolumeOptions(ctx context.Context, requestName string, volOptions, secre
 	}
 	defer cr.DeleteCredentials()
 
-	opts.FscID, err = getFscID(ctx, opts.Monitors, cr, opts.FsName)
+	err = opts.Connect(cr)
+	if err != nil {
+		return nil, err
+	}
+
+	err = opts.fetchFscID(ctx)
 	if err != nil {
 		return nil, err
 	}
