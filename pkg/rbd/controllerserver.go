@@ -266,6 +266,7 @@ func (cs *ControllerServer) checkSnapshot(ctx context.Context, req *csi.CreateVo
 	defer cr.DeleteCredentials()
 
 	rbdSnap := &rbdSnapshot{}
+	defer rbdSnap.Destroy()
 	if err = genSnapFromSnapID(ctx, rbdSnap, snapshotID, cr); err != nil {
 		if _, ok := err.(ErrSnapNotFound); !ok {
 			return status.Error(codes.Internal, err.Error())
@@ -279,7 +280,7 @@ func (cs *ControllerServer) checkSnapshot(ctx context.Context, req *csi.CreateVo
 		return status.Error(codes.InvalidArgument, "missing requested Snapshot ID")
 	}
 
-	err = restoreSnapshot(ctx, rbdVol, rbdSnap, cr)
+	err = restoreSnapshot(ctx, rbdVol, rbdSnap)
 	if err != nil {
 		return status.Error(codes.Internal, err.Error())
 	}
@@ -518,9 +519,15 @@ func (cs *ControllerServer) CreateSnapshot(ctx context.Context, req *csi.CreateS
 	}
 	defer cs.SnapshotLocks.Release(req.GetName())
 
+	err = rbdSnap.Connect(cr)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, err.Error())
+	}
+	defer rbdSnap.Destroy()
+
 	// Need to check for already existing snapshot name, and if found
 	// check for the requested source volume id and already allocated source volume id
-	found, err := checkSnapExists(ctx, rbdSnap, cr)
+	found, err := checkSnapExists(ctx, rbdSnap)
 	if err != nil {
 		if _, ok := err.(util.ErrSnapNameConflict); ok {
 			return nil, status.Error(codes.AlreadyExists, err.Error())
@@ -592,7 +599,7 @@ func (cs *ControllerServer) validateSnapshotReq(ctx context.Context, req *csi.Cr
 }
 
 func (cs *ControllerServer) doSnapshot(ctx context.Context, rbdSnap *rbdSnapshot, cr *util.Credentials) (err error) {
-	err = createSnapshot(ctx, rbdSnap, cr)
+	err = createSnapshot(ctx, rbdSnap)
 	// If snap creation fails, even due to snapname already used, fail, next attempt will get a new
 	// uuid for use as the snap name
 	if err != nil {
@@ -601,7 +608,7 @@ func (cs *ControllerServer) doSnapshot(ctx context.Context, rbdSnap *rbdSnapshot
 	}
 	defer func() {
 		if err != nil {
-			errDefer := deleteSnapshot(ctx, rbdSnap, cr)
+			errDefer := deleteSnapshot(ctx, rbdSnap)
 			if errDefer != nil {
 				klog.Errorf(util.Log(ctx, "failed to delete snapshot: %v"), errDefer)
 				err = fmt.Errorf("snapshot created but failed to delete snapshot due to"+
@@ -610,14 +617,14 @@ func (cs *ControllerServer) doSnapshot(ctx context.Context, rbdSnap *rbdSnapshot
 			err = status.Error(codes.Internal, err.Error())
 		}
 	}()
-	err = protectSnapshot(ctx, rbdSnap, cr)
+	err = protectSnapshot(ctx, rbdSnap)
 	if err != nil {
 		klog.Errorf(util.Log(ctx, "failed to protect snapshot: %v"), err)
 		return status.Error(codes.Internal, err.Error())
 	}
 	defer func() {
 		if err != nil {
-			errDefer := unprotectSnapshot(ctx, rbdSnap, cr)
+			errDefer := unprotectSnapshot(ctx, rbdSnap)
 			if errDefer != nil {
 				klog.Errorf(util.Log(ctx, "failed to unprotect snapshot: %v"), errDefer)
 				err = fmt.Errorf("snapshot created but failed to unprotect snapshot due to"+
@@ -627,7 +634,7 @@ func (cs *ControllerServer) doSnapshot(ctx context.Context, rbdSnap *rbdSnapshot
 		}
 	}()
 
-	err = getSnapshotMetadata(ctx, rbdSnap, cr)
+	err = getSnapshotMetadata(ctx, rbdSnap)
 	if err != nil {
 		klog.Errorf(util.Log(ctx, "failed to fetch snapshot metadata: %v"), err)
 		return status.Error(codes.Internal, err.Error())
@@ -662,6 +669,7 @@ func (cs *ControllerServer) DeleteSnapshot(ctx context.Context, req *csi.DeleteS
 	defer cs.SnapshotLocks.Release(snapshotID)
 
 	rbdSnap := &rbdSnapshot{}
+	defer rbdSnap.Destroy()
 	if err = genSnapFromSnapID(ctx, rbdSnap, snapshotID, cr); err != nil {
 		// if error is ErrPoolNotFound, the pool is already deleted we dont
 		// need to worry about deleting snapshot or omap data, return success
@@ -706,7 +714,7 @@ func (cs *ControllerServer) DeleteSnapshot(ctx context.Context, req *csi.DeleteS
 	defer cs.SnapshotLocks.Release(rbdSnap.RequestName)
 
 	// Unprotect snapshot
-	err = unprotectSnapshot(ctx, rbdSnap, cr)
+	err = unprotectSnapshot(ctx, rbdSnap)
 	if err != nil {
 		return nil, status.Errorf(codes.FailedPrecondition,
 			"failed to unprotect snapshot: %s/%s with error: %v",
@@ -715,7 +723,7 @@ func (cs *ControllerServer) DeleteSnapshot(ctx context.Context, req *csi.DeleteS
 
 	// Deleting snapshot
 	klog.V(4).Infof(util.Log(ctx, "deleting Snaphot %s"), rbdSnap.RbdSnapName)
-	if err := deleteSnapshot(ctx, rbdSnap, cr); err != nil {
+	if err := deleteSnapshot(ctx, rbdSnap); err != nil {
 		return nil, status.Errorf(codes.FailedPrecondition,
 			"failed to delete snapshot: %s/%s with error: %v",
 			rbdSnap.Pool, rbdSnap.RbdSnapName, err)

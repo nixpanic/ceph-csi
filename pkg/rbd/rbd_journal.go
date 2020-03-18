@@ -108,13 +108,13 @@ because, the order of omap creation and deletion are inverse of each other, and 
 request name lock, and hence any stale omaps are leftovers from incomplete transactions and are
 hence safe to garbage collect.
 */
-func checkSnapExists(ctx context.Context, rbdSnap *rbdSnapshot, cr *util.Credentials) (bool, error) {
+func checkSnapExists(ctx context.Context, rbdSnap *rbdSnapshot) (bool, error) {
 	err := validateRbdSnap(rbdSnap)
 	if err != nil {
 		return false, err
 	}
 
-	snapUUID, err := snapJournal.CheckReservation(ctx, rbdSnap.Monitors, cr, rbdSnap.Pool,
+	snapUUID, err := snapJournal.CheckReservation(ctx, rbdSnap.Monitors, rbdSnap.Creds, rbdSnap.Pool,
 		rbdSnap.RequestName, rbdSnap.NamePrefix, rbdSnap.RbdImageName, "")
 	if err != nil {
 		return false, err
@@ -125,17 +125,17 @@ func checkSnapExists(ctx context.Context, rbdSnap *rbdSnapshot, cr *util.Credent
 
 	// now that we now that the reservation exists, let's get the image name from
 	// the omap
-	_, rbdSnap.RbdSnapName, _, _, err = volJournal.GetObjectUUIDData(ctx, rbdSnap.Monitors, cr,
+	_, rbdSnap.RbdSnapName, _, _, err = volJournal.GetObjectUUIDData(ctx, rbdSnap.Monitors, rbdSnap.Creds,
 		rbdSnap.Pool, snapUUID, false)
 	if err != nil {
 		return false, err
 	}
 
 	// Fetch on-disk image attributes
-	err = updateSnapWithImageInfo(ctx, rbdSnap, cr)
+	err = updateSnapWithImageInfo(ctx, rbdSnap)
 	if err != nil {
 		if _, ok := err.(ErrSnapNotFound); ok {
-			err = snapJournal.UndoReservation(ctx, rbdSnap.Monitors, cr, rbdSnap.Pool,
+			err = snapJournal.UndoReservation(ctx, rbdSnap.Monitors, rbdSnap.Creds, rbdSnap.Pool,
 				rbdSnap.RbdSnapName, rbdSnap.RequestName)
 			return false, err
 		}
@@ -143,7 +143,7 @@ func checkSnapExists(ctx context.Context, rbdSnap *rbdSnapshot, cr *util.Credent
 	}
 
 	// found a snapshot already available, process and return its information
-	rbdSnap.SnapID, err = util.GenerateVolID(ctx, rbdSnap.Monitors, cr, rbdSnap.Pool,
+	rbdSnap.SnapID, err = util.GenerateVolID(ctx, rbdSnap.Monitors, rbdSnap.Creds, rbdSnap.Pool,
 		rbdSnap.ClusterID, snapUUID, volIDVersion)
 	if err != nil {
 		return false, err

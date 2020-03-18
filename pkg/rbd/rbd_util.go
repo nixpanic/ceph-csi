@@ -91,6 +91,8 @@ type rbdVolume struct {
 
 // rbdSnapshot represents a CSI snapshot and its RBD snapshot specifics
 type rbdSnapshot struct {
+	util.ClusterConnection
+
 	// SourceVolumeID is the volume ID of RbdImageName, that is exchanged with CSI drivers
 	// RbdImageName is the name of the RBD image, that is this rbdSnapshot's source image
 	// RbdSnapName is the name of the RBD snapshot backing this rbdSnapshot
@@ -101,8 +103,6 @@ type rbdSnapshot struct {
 	NamePrefix     string
 	RbdSnapName    string
 	SnapID         string
-	Monitors       string
-	Pool           string
 	CreatedAt      *timestamp.Timestamp
 	SizeBytes      int64
 	ClusterID      string
@@ -282,8 +282,8 @@ func deleteImage(ctx context.Context, pOpts *rbdVolume, cr *util.Credentials) er
 
 // updateSnapWithImageInfo updates provided rbdSnapshot with information from on-disk data
 // regarding the same
-func updateSnapWithImageInfo(ctx context.Context, rbdSnap *rbdSnapshot, cr *util.Credentials) error {
-	snapInfo, err := getSnapInfo(ctx, rbdSnap.Monitors, cr, rbdSnap.Pool,
+func updateSnapWithImageInfo(ctx context.Context, rbdSnap *rbdSnapshot) error {
+	snapInfo, err := getSnapInfo(ctx, rbdSnap.Monitors, rbdSnap.Creds, rbdSnap.Pool,
 		rbdSnap.RbdImageName, rbdSnap.RbdSnapName)
 	if err != nil {
 		return err
@@ -340,18 +340,23 @@ func genSnapFromSnapID(ctx context.Context, rbdSnap *rbdSnapshot, snapshotID str
 		return err
 	}
 
-	rbdSnap.Pool, err = util.GetPoolName(ctx, rbdSnap.Monitors, cr, vi.LocationID)
+	rbdSnap.Pool, err = util.GetPoolName(ctx, rbdSnap.Monitors, rbdSnap.Creds, vi.LocationID)
+	if err != nil {
+		return err
+	}
+
+	err = rbdSnap.Connect(cr)
 	if err != nil {
 		return err
 	}
 
 	rbdSnap.RequestName, rbdSnap.RbdSnapName, rbdSnap.RbdImageName, _, err = snapJournal.GetObjectUUIDData(ctx, rbdSnap.Monitors,
-		cr, rbdSnap.Pool, vi.ObjectUUID, true)
+		rbdSnap.Creds, rbdSnap.Pool, vi.ObjectUUID, true)
 	if err != nil {
 		return err
 	}
 
-	err = updateSnapWithImageInfo(ctx, rbdSnap, cr)
+	err = updateSnapWithImageInfo(ctx, rbdSnap)
 
 	return err
 }
@@ -616,7 +621,7 @@ func imageFeaturesToUint64(ctx context.Context, imageFeatures string) uint64 {
 	return features
 }
 
-func protectSnapshot(ctx context.Context, pOpts *rbdSnapshot, cr *util.Credentials) error {
+func protectSnapshot(ctx context.Context, pOpts *rbdSnapshot) error {
 	var output []byte
 
 	image := pOpts.RbdImageName
@@ -624,7 +629,7 @@ func protectSnapshot(ctx context.Context, pOpts *rbdSnapshot, cr *util.Credentia
 
 	klog.V(4).Infof(util.Log(ctx, "rbd: snap protect %s using mon %s, pool %s "), image, pOpts.Monitors, pOpts.Pool)
 	args := []string{"snap", "protect", "--pool", pOpts.Pool, "--snap", snapName, image, "--id",
-		cr.ID, "-m", pOpts.Monitors, "--keyfile=" + cr.KeyFile}
+		pOpts.Creds.ID, "-m", pOpts.Monitors, "--keyfile=" + pOpts.Creds.KeyFile}
 
 	output, err := execCommand("rbd", args)
 
@@ -635,7 +640,7 @@ func protectSnapshot(ctx context.Context, pOpts *rbdSnapshot, cr *util.Credentia
 	return nil
 }
 
-func createSnapshot(ctx context.Context, pOpts *rbdSnapshot, cr *util.Credentials) error {
+func createSnapshot(ctx context.Context, pOpts *rbdSnapshot) error {
 	var output []byte
 
 	image := pOpts.RbdImageName
@@ -643,7 +648,7 @@ func createSnapshot(ctx context.Context, pOpts *rbdSnapshot, cr *util.Credential
 
 	klog.V(4).Infof(util.Log(ctx, "rbd: snap create %s using mon %s, pool %s"), image, pOpts.Monitors, pOpts.Pool)
 	args := []string{"snap", "create", "--pool", pOpts.Pool, "--snap", snapName, image,
-		"--id", cr.ID, "-m", pOpts.Monitors, "--keyfile=" + cr.KeyFile}
+		"--id", pOpts.Creds.ID, "-m", pOpts.Monitors, "--keyfile=" + pOpts.Creds.KeyFile}
 
 	output, err := execCommand("rbd", args)
 
@@ -654,7 +659,7 @@ func createSnapshot(ctx context.Context, pOpts *rbdSnapshot, cr *util.Credential
 	return nil
 }
 
-func unprotectSnapshot(ctx context.Context, pOpts *rbdSnapshot, cr *util.Credentials) error {
+func unprotectSnapshot(ctx context.Context, pOpts *rbdSnapshot) error {
 	var output []byte
 
 	image := pOpts.RbdImageName
@@ -662,7 +667,7 @@ func unprotectSnapshot(ctx context.Context, pOpts *rbdSnapshot, cr *util.Credent
 
 	klog.V(4).Infof(util.Log(ctx, "rbd: snap unprotect %s using mon %s, pool %s"), image, pOpts.Monitors, pOpts.Pool)
 	args := []string{"snap", "unprotect", "--pool", pOpts.Pool, "--snap", snapName, image, "--id",
-		cr.ID, "-m", pOpts.Monitors, "--keyfile=" + cr.KeyFile}
+		pOpts.Creds.ID, "-m", pOpts.Monitors, "--keyfile=" + pOpts.Creds.KeyFile}
 
 	output, err := execCommand("rbd", args)
 
@@ -673,7 +678,7 @@ func unprotectSnapshot(ctx context.Context, pOpts *rbdSnapshot, cr *util.Credent
 	return nil
 }
 
-func deleteSnapshot(ctx context.Context, pOpts *rbdSnapshot, cr *util.Credentials) error {
+func deleteSnapshot(ctx context.Context, pOpts *rbdSnapshot) error {
 	var output []byte
 
 	image := pOpts.RbdImageName
@@ -681,7 +686,7 @@ func deleteSnapshot(ctx context.Context, pOpts *rbdSnapshot, cr *util.Credential
 
 	klog.V(4).Infof(util.Log(ctx, "rbd: snap rm %s using mon %s, pool %s"), image, pOpts.Monitors, pOpts.Pool)
 	args := []string{"snap", "rm", "--pool", pOpts.Pool, "--snap", snapName, image, "--id",
-		cr.ID, "-m", pOpts.Monitors, "--keyfile=" + cr.KeyFile}
+		pOpts.Creds.ID, "-m", pOpts.Monitors, "--keyfile=" + pOpts.Creds.KeyFile}
 
 	output, err := execCommand("rbd", args)
 
@@ -689,7 +694,7 @@ func deleteSnapshot(ctx context.Context, pOpts *rbdSnapshot, cr *util.Credential
 		return errors.Wrapf(err, "failed to delete snapshot, command output: %s", string(output))
 	}
 
-	if err := undoSnapReservation(ctx, pOpts, cr); err != nil {
+	if err := undoSnapReservation(ctx, pOpts, pOpts.Creds); err != nil {
 		klog.Errorf(util.Log(ctx, "failed to remove reservation for snapname (%s) with backing snap (%s) on image (%s) (%s)"),
 			pOpts.RequestName, pOpts.RbdSnapName, pOpts.RbdImageName, err)
 	}
@@ -697,7 +702,7 @@ func deleteSnapshot(ctx context.Context, pOpts *rbdSnapshot, cr *util.Credential
 	return nil
 }
 
-func restoreSnapshot(ctx context.Context, pVolOpts *rbdVolume, pSnapOpts *rbdSnapshot, cr *util.Credentials) error {
+func restoreSnapshot(ctx context.Context, pVolOpts *rbdVolume, pSnapOpts *rbdSnapshot) error {
 	var output []byte
 
 	image := pVolOpts.RbdImageName
@@ -705,7 +710,7 @@ func restoreSnapshot(ctx context.Context, pVolOpts *rbdVolume, pSnapOpts *rbdSna
 
 	klog.V(4).Infof(util.Log(ctx, "rbd: clone %s using mon %s, pool %s"), image, pVolOpts.Monitors, pVolOpts.Pool)
 	args := []string{"clone", pSnapOpts.Pool + "/" + pSnapOpts.RbdImageName + "@" + snapName,
-		pVolOpts.Pool + "/" + image, "--id", cr.ID, "-m", pVolOpts.Monitors, "--keyfile=" + cr.KeyFile}
+		pVolOpts.Pool + "/" + image, "--id", pVolOpts.Creds.ID, "-m", pVolOpts.Monitors, "--keyfile=" + pVolOpts.Creds.KeyFile}
 
 	output, err := execCommand("rbd", args)
 
@@ -718,11 +723,11 @@ func restoreSnapshot(ctx context.Context, pVolOpts *rbdVolume, pSnapOpts *rbdSna
 
 // getSnapshotMetadata fetches on-disk metadata about the snapshot and populates the passed in
 // rbdSnapshot structure
-func getSnapshotMetadata(ctx context.Context, pSnapOpts *rbdSnapshot, cr *util.Credentials) error {
+func getSnapshotMetadata(ctx context.Context, pSnapOpts *rbdSnapshot) error {
 	imageName := pSnapOpts.RbdImageName
 	snapName := pSnapOpts.RbdSnapName
 
-	snapInfo, err := getSnapInfo(ctx, pSnapOpts.Monitors, cr, pSnapOpts.Pool, imageName, snapName)
+	snapInfo, err := getSnapInfo(ctx, pSnapOpts.Monitors, pSnapOpts.Creds, pSnapOpts.Pool, imageName, snapName)
 	if err != nil {
 		return err
 	}
