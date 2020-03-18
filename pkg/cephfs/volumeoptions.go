@@ -178,7 +178,7 @@ func newVolumeOptions(ctx context.Context, requestName string, volOptions, secre
 		return nil, err
 	}
 
-	opts.MetadataPool, err = getMetadataPool(ctx, opts.Monitors, cr, opts.FsName)
+	err = opts.fetchMetadataPool(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -196,6 +196,7 @@ func newVolumeOptionsFromVolID(ctx context.Context, volID string, volOpt, secret
 		volOptions volumeOptions
 		vid        volumeIdentifier
 	)
+	defer volOptions.Destroy()
 
 	// Decode the VolID first, to detect older volumes or pre-provisioned volumes
 	// before other errors
@@ -218,12 +219,17 @@ func newVolumeOptionsFromVolID(ctx context.Context, volID string, volOpt, secret
 	}
 	defer cr.DeleteCredentials()
 
+	err = volOptions.Connect(cr)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	volOptions.FsName, err = getFsName(ctx, volOptions.Monitors, cr, volOptions.FscID)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	volOptions.MetadataPool, err = getMetadataPool(ctx, volOptions.Monitors, cr, volOptions.FsName)
+	err = volOptions.fetchMetadataPool(ctx)
 	if err != nil {
 		return nil, nil, err
 	}

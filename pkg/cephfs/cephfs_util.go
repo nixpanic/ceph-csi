@@ -64,29 +64,30 @@ type CephFilesystem struct {
 	DataPoolIDs    []int    `json:"data_pool_ids"`
 }
 
-func getMetadataPool(ctx context.Context, monitors string, cr *util.Credentials, fsName string) (string, error) {
+func (v *volumeOptions) fetchMetadataPool(ctx context.Context) error {
 	// ./tbox ceph fs ls --format=json
 	// [{"name":"myfs","metadata_pool":"myfs-metadata","metadata_pool_id":4,...},...]
 	var filesystems []CephFilesystem
 	err := execCommandJSON(ctx, &filesystems,
 		"ceph",
-		"-m", monitors,
-		"--id", cr.ID,
-		"--keyfile="+cr.KeyFile,
+		"-m", v.Monitors,
+		"--id", v.Creds.ID,
+		"--keyfile="+v.Creds.KeyFile,
 		"-c", util.CephConfigPath,
 		"fs", "ls", "--format=json",
 	)
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	for _, fs := range filesystems {
-		if fs.Name == fsName {
-			return fs.MetadataPool, nil
+		if fs.Name == v.FsName {
+			v.MetadataPool = fs.MetadataPool
+			return nil
 		}
 	}
 
-	return "", util.ErrPoolNotFound{Pool: fsName, Err: fmt.Errorf("fsName (%s) not found in Ceph cluster", fsName)}
+	return util.ErrPoolNotFound{Pool: v.FsName, Err: fmt.Errorf("fsName (%s) not found in Ceph cluster", v.FsName)}
 }
 
 // CephFilesystemDump is a representation of the main json structure returned by 'ceph fs dump'
