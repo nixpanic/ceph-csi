@@ -218,6 +218,9 @@ func (cj *CSIJournal) CheckReservation(ctx context.Context, monitors string, cr 
 		if _, ok := err.(ErrKeyNotFound); ok {
 			return "", nil
 		}
+		if _, ok := err.(ErrPoolNotFound); ok {
+			return "", nil
+		}
 		return "", err
 	}
 
