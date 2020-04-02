@@ -32,7 +32,7 @@ node('cico-workspace') {
 		}
 
 		stage('build') {
-			sh 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no root@${CICO_NODE} "cd /opt/build && make containerized-build CONTAINER_CMD=podman"'
+			sh 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no root@${CICO_NODE} "export GOPATH=/opt/build/go ; cd /opt/build/go/src/github.com/ceph/ceph-csi && make containerized-build CONTAINER_CMD=podman"'
 		}
 	}
 
