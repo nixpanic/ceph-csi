@@ -245,11 +245,11 @@ func rbdManagerTaskDeleteImage(ctx context.Context, pOpts *rbdVolume, cr *util.C
 }
 
 // deleteImage deletes a ceph image with provision and volume options.
-func deleteImage(ctx context.Context, pOpts *rbdVolume, cr *util.Credentials) error {
+func (rv *rbdVolume) deleteImage(ctx context.Context) error {
 	var output []byte
 
-	image := pOpts.RbdImageName
-	found, _, err := rbdStatus(ctx, pOpts, cr)
+	image := rv.RbdImageName
+	found, _, err := rbdStatus(ctx, rv, rv.Creds)
 	if err != nil {
 		return err
 	}
@@ -258,22 +258,22 @@ func deleteImage(ctx context.Context, pOpts *rbdVolume, cr *util.Credentials) er
 		return fmt.Errorf("rbd %s is still being used", image)
 	}
 
-	klog.V(4).Infof(util.Log(ctx, "rbd: rm %s using mon %s, pool %s"), image, pOpts.Monitors, pOpts.Pool)
+	klog.V(4).Infof(util.Log(ctx, "rbd: rm %s using mon %s, pool %s"), image, rv.Monitors, rv.Pool)
 
 	// attempt to use Ceph manager based deletion support if available
-	rbdCephMgrSupported, err := rbdManagerTaskDeleteImage(ctx, pOpts, cr)
+	rbdCephMgrSupported, err := rbdManagerTaskDeleteImage(ctx, rv, rv.Creds)
 	if rbdCephMgrSupported && err != nil {
-		klog.Errorf(util.Log(ctx, "failed to add task to delete rbd image: %s/%s, %v"), pOpts.Pool, image, err)
+		klog.Errorf(util.Log(ctx, "failed to add task to delete rbd image: %s/%s, %v"), rv.Pool, image, err)
 		return err
 	}
 
 	if !rbdCephMgrSupported {
 		// attempt older style deletion
-		args := []string{"rm", image, "--pool", pOpts.Pool, "--id", cr.ID, "-m", pOpts.Monitors,
-			"--keyfile=" + cr.KeyFile}
+		args := []string{"rm", image, "--pool", rv.Pool, "--id", rv.Creds.ID, "-m", rv.Monitors,
+			"--keyfile=" + rv.Creds.KeyFile}
 		output, err = execCommand("rbd", args)
 		if err != nil {
-			klog.Errorf(util.Log(ctx, "failed to delete rbd image: %s/%s, error: %v, command output: %s"), pOpts.Pool, image, err, string(output))
+			klog.Errorf(util.Log(ctx, "failed to delete rbd image: %s/%s, error: %v, command output: %s"), rv.Pool, image, err, string(output))
 		}
 	}
 

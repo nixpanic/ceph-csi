@@ -202,7 +202,7 @@ func (cs *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 		if err != nil {
 			klog.Errorf(util.Log(ctx, "failed to save encryption status, deleting image %s"),
 				rbdVol.RbdImageName)
-			if deleteErr := deleteImage(ctx, rbdVol, cr); err != nil {
+			if deleteErr := rbdVol.deleteImage(ctx); err != nil {
 				klog.Errorf(util.Log(ctx, "failed to delete rbd image: %s/%s with error: %v"),
 					rbdVol.Pool, rbdVol.RbdImageName, deleteErr)
 				return nil, deleteErr
@@ -322,8 +322,14 @@ func (cs *ControllerServer) DeleteLegacyVolume(ctx context.Context, req *csi.Del
 	// Update rbdImageName as the VolName when dealing with version 1 volumes
 	rbdVol.RbdImageName = rbdVol.VolName
 
+	err := rbdVol.Connect(cr)
+	if err != nil {
+		klog.Errorf(util.Log(ctx, "failed to connect to volume %v: %v"), rbdVol.RbdImageName, err)
+		return nil, err
+	}
+
 	klog.V(4).Infof(util.Log(ctx, "deleting legacy volume %s"), rbdVol.VolName)
-	if err := deleteImage(ctx, rbdVol, cr); err != nil {
+	if err = rbdVol.deleteImage(ctx); err != nil {
 		// TODO: can we detect "already deleted" situations here and proceed?
 		klog.Errorf(util.Log(ctx, "failed to delete legacy rbd image: %s/%s with error: %v"), rbdVol.Pool, rbdVol.VolName, err)
 		return nil, status.Error(codes.Internal, err.Error())
@@ -364,6 +370,11 @@ func (cs *ControllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVol
 
 	rbdVol, err := genVolFromVolID(ctx, volumeID, cr, req.GetSecrets())
 	if rbdVol != nil {
+		err = rbdVol.Connect(cr)
+		if err != nil {
+			klog.Errorf(util.Log(ctx, "failed to connect to volume %v: %v"), rbdVol.RbdImageName, err)
+			return nil, err
+		}
 		defer rbdVol.Destroy()
 	}
 	if err != nil {
@@ -422,7 +433,7 @@ func (cs *ControllerServer) DeleteVolume(ctx context.Context, req *csi.DeleteVol
 
 	// Deleting rbd image
 	klog.V(4).Infof(util.Log(ctx, "deleting image %s"), rbdVol.RbdImageName)
-	if err = deleteImage(ctx, rbdVol, cr); err != nil {
+	if err = rbdVol.deleteImage(ctx); err != nil {
 		klog.Errorf(util.Log(ctx, "failed to delete rbd image: %s/%s with error: %v"),
 			rbdVol.Pool, rbdVol.RbdImageName, err)
 		return nil, status.Error(codes.Internal, err.Error())
