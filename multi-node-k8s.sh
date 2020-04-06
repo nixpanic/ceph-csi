@@ -40,6 +40,6 @@ git clone https://github.com/galexrt/k8s-vagrant-multi-node
 cd k8s-vagrant-multi-node
 
 make preflight
-make up -j4 BOX_OS=centos VAGRANT_DEFAULT_PROVIDER=libvirt NODE_COUNT=3 NODE_MEMORY_SIZE_GB=4 DISK_COUNT=4 DISK_SIZE_GB=50
+make up -j4 BOX_OS=centos VAGRANT_DEFAULT_PROVIDER=libvirt MASTER_CPUS=4 MASTER_MEMORY_SIZE_GB=12 NODE_COUNT=3 NODE_MEMORY_SIZE_GB=4 DISK_COUNT=4 DISK_SIZE_GB=50
 make versions
 make status
