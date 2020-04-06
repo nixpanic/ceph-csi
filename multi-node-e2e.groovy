@@ -29,7 +29,14 @@ node('cico-workspace') {
 		stage('prepare bare-metal machine') {
 			sh 'scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ./prepare.sh ./multi-node-k8s.sh root@${CICO_NODE}:'
 			sh 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no root@${CICO_NODE} ./prepare.sh --workdir=/opt/build --gitrepo=${GIT_REPO} --branch=${GIT_BRANCH}'
+		}
+
+		stage('deploy kubernetes') {
 			sh 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no root@${CICO_NODE} ./multi-node-k8s.sh'
+		}
+
+		stage('deploy rook') {
+			sh 'ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no root@${CICO_NODE} /opt/build/go/src/github.com/ceph/ceph-csi/scripts/rook.sh deploy'
 		}
 
 		stage('build') {
