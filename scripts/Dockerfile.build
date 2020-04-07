@@ -1,0 +1,30 @@
+FROM ceph/ceph:v15 AS builder
+
+ENV GOPATH=/go \
+	GO111MODULE=on
+
+RUN yum -y install \
+	golang \
+	git \
+	make \
+	librados-devel \
+	librbd-devel \
+    && yum -y update \
+    && true
+
+ADD . /go/src/github.com/ceph/ceph-csi/
+RUN cd /go/src/github.com/ceph/ceph-csi && make
+
+
+FROM ceph/ceph:v15
+LABEL maintainers="Ceph-CSI Authors"
+LABEL description="Ceph-CSI Plugin"
+
+ENV CSIBIN=/usr/local/bin/cephcsi
+
+COPY --from=builder /go/src/github.com/ceph/ceph-csi/_output/cephcsi $CSIBIN
+
+# validate available dynamically linked libraries
+RUN ldd $CSIBIN | [ -z "$(grep '=> not found')" ]
+
+ENTRYPOINT ["/usr/local/bin/cephcsi"]
