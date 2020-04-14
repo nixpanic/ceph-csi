@@ -25,7 +25,6 @@ import (
 
 type ClusterConnection struct {
 	Monitors string `json:"monitors"`
-	Pool     string `json:"pool"`
 
 	// connection
 	conn *rados.Conn
@@ -47,7 +46,7 @@ var (
 // rbdVol.Connect() connects to the Ceph cluster and sets rbdVol.conn for further usage.
 func (cc *ClusterConnection) Connect(cr *Credentials) error {
 	if cc.conn == nil {
-		conn, err := connPool.Get(cc.Pool, cc.Monitors, cr.ID, cr.KeyFile)
+		conn, err := connPool.Get(cc.Monitors, cr.ID, cr.KeyFile)
 		if err != nil {
 			return errors.Wrapf(err, "failed to get connection")
 		}
@@ -67,14 +66,14 @@ func (cc *ClusterConnection) Destroy() {
 	}
 }
 
-func (cc *ClusterConnection) GetIoctx() (*rados.IOContext, error) {
+func (cc *ClusterConnection) GetIoctx(pool string) (*rados.IOContext, error) {
 	if cc.conn == nil {
 		return nil, errors.New("cluster is not connected yet")
 	}
 
-	ioctx, err := cc.conn.OpenIOContext(cc.Pool)
+	ioctx, err := cc.conn.OpenIOContext(pool)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to open IOContext for pool %s", cc.Pool)
+		return nil, errors.Wrapf(err, "failed to open IOContext for pool %s", pool)
 	}
 
 	return ioctx, nil

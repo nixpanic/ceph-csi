@@ -84,6 +84,7 @@ type rbdVolume struct {
 	NamePrefix          string
 	VolID               string `json:"volID"`
 	JournalPool         string
+	Pool                string `json:"pool"`
 	DataPool            string
 	ImageFeatures       string `json:"imageFeatures"`
 	AdminID             string `json:"adminId"`
@@ -155,7 +156,7 @@ func createImage(ctx context.Context, pOpts *rbdVolume, cr *util.Credentials) er
 		return err
 	}
 
-	ioctx, err := pOpts.GetIoctx()
+	ioctx, err := pOpts.GetIoctx(pOpts.Pool)
 	if err != nil {
 		return errors.Wrapf(err, "failed to get IOContext")
 	}
@@ -182,7 +183,7 @@ func (rv *rbdVolume) open() (*librbd.Image, error) {
 		rv.RbdImageName = volJournal.GetNameForUUID(rv.NamePrefix, vi.ObjectUUID, false)
 	}
 
-	ioctx, err := rv.GetIoctx()
+	ioctx, err := rv.GetIoctx(rv.Pool)
 	if err != nil {
 		return nil, err
 	}
