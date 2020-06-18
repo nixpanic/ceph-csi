@@ -105,7 +105,7 @@ gosec:
 	./scripts/gosec.sh
 
 func-test:
-	go test -mod=vendor github.com/ceph/ceph-csi/e2e $(TESTOPTIONS)
+	go test -tags nautilus -mod=vendor github.com/ceph/ceph-csi/e2e $(TESTOPTIONS)
 
 check-env:
 	@./scripts/check-env.sh
@@ -116,10 +116,10 @@ commitlint:
 .PHONY: cephcsi
 cephcsi: check-env
 	if [ ! -d ./vendor ]; then (go mod tidy && go mod vendor); fi
-	GOOS=linux go build -mod vendor -a -ldflags '$(LDFLAGS)' -o _output/cephcsi ./cmd/
+	GOOS=linux go build -tags nautilus -mod vendor -a -ldflags '$(LDFLAGS)' -o _output/cephcsi ./cmd/
 
 e2e.test: check-env
-	go test -mod=vendor -c ./e2e
+	go test -tags nautilus -mod=vendor -c ./e2e
 
 .PHONY: containerized-build containerized-test
 containerized-build: TARGET = cephcsi
