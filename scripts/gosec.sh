@@ -27,7 +27,6 @@ if [[ -x "$(command -v gosec)" ]]; then
   # gosec does not support -mod=vendor, so fallback to non-module support and
   # assume all dependencies are available in ./vendor already
   export GO111MODULE=off
-  echo ${CEPH_TAG}
   find cmd internal -type d -print0 | xargs --null gosec -tags ${CEPH_TAG}
 else
   echo "WARNING: gosec not found, skipping security tests" >&2

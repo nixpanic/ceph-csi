@@ -32,6 +32,11 @@ endif
 
 GO_PROJECT=github.com/ceph/ceph-csi
 
+# set ceph release tag flag for go build, go test, go sec ...etc
+ifndef CEPH_TAG
+CEPH_TAG=nautilus
+endif
+
 # go build flags
 LDFLAGS ?=
 LDFLAGS += -X $(GO_PROJECT)/internal/util.GitCommit=$(GIT_COMMIT)
@@ -77,7 +82,7 @@ test: go-test static-check mod-check
 static-check: check-env go-lint lint-extras gosec
 
 go-test: check-env
-	./scripts/test-go.sh
+	./scripts/test-go.sh $(CEPH_TAG)
 
 mod-check: check-env
 	@echo 'running: go mod verify'
@@ -102,10 +107,10 @@ lint-helm:
 	./scripts/lint-extras.sh lint-helm
 
 gosec:
-	./scripts/gosec.sh
+	./scripts/gosec.sh $(CEPH_TAG)
 
 func-test:
-	go test -tags nautilus -mod=vendor github.com/ceph/ceph-csi/e2e $(TESTOPTIONS)
+	go test -tags $(CEPH_TAG) -mod=vendor github.com/ceph/ceph-csi/e2e $(TESTOPTIONS)
 
 check-env:
 	@./scripts/check-env.sh
@@ -116,10 +121,10 @@ commitlint:
 .PHONY: cephcsi
 cephcsi: check-env
 	if [ ! -d ./vendor ]; then (go mod tidy && go mod vendor); fi
-	GOOS=linux go build -tags nautilus -mod vendor -a -ldflags '$(LDFLAGS)' -o _output/cephcsi ./cmd/
+	GOOS=linux go build -tags $(CEPH_TAG) -mod vendor -a -ldflags '$(LDFLAGS)' -o _output/cephcsi ./cmd/
 
 e2e.test: check-env
-	go test -tags nautilus -mod=vendor -c ./e2e
+	go test -tags $(CEPH_TAG) -mod=vendor -c ./e2e
 
 .PHONY: containerized-build containerized-test
 containerized-build: TARGET = cephcsi

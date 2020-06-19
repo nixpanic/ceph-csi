@@ -11,6 +11,29 @@ export KUBE_VERSION=$1
 kube_version() {
     echo "${KUBE_VERSION}" | sed 's/^v//' | cut -d'.' -f"${1}"
 }
+
+case "${1:-}" in
+mimic)
+    CEPH_TAG="mimic"
+    ;;
+nautilus)
+    CEPH_TAG="nautilus"
+    ;;
+octopus)
+    CEPH_TAG="octopus"
+    ;;
+*)
+    echo " $0 [command]
+Available Commands:
+  mimic               set ceph tag to mimic for go test
+  nautilus            set ceph tag to nautilus for go test
+  octopus             set ceph tag to octopus for go test
+" >&2
+    ;;
+esac
+
+
+
 sudo scripts/minikube.sh up
 sudo scripts/minikube.sh deploy-rook
 sudo scripts/minikube.sh create-block-pool
@@ -29,7 +52,7 @@ if [[ "${KUBE_MAJOR}" -ge 1 ]] && [[ "${KUBE_MINOR}" -ge 17 ]]; then
 fi
 
 # functional tests
-go test -tags nautilus github.com/ceph/ceph-csi/e2e --deploy-timeout=10 -timeout=30m --cephcsi-namespace=cephcsi-e2e-$RANDOM -v -mod=vendor
+go test -tags ${CEPH_TAG} github.com/ceph/ceph-csi/e2e --deploy-timeout=10 -timeout=30m --cephcsi-namespace=cephcsi-e2e-$RANDOM -v -mod=vendor
 
 if [[ "${KUBE_MAJOR}" -ge 1 ]] && [[ "${KUBE_MINOR}" -ge 17 ]]; then
     # delete snapshot CRD
