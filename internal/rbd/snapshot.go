@@ -17,10 +17,10 @@ package rbd
 
 import (
 	"context"
+	"errors"
 
 	"github.com/ceph/ceph-csi/internal/util"
 
-	"github.com/pkg/errors"
 	"k8s.io/klog"
 )
 
@@ -36,7 +36,7 @@ func createRBDClone(ctx context.Context, parentVol, cloneRbdVol *rbdVolume, snap
 	err = cloneRbdVol.cloneRbdImageFromSnapshot(ctx, snap)
 	if err != nil {
 		klog.Errorf(util.Log(ctx, "failed to clone rbd image %s from snapshot %s: %v"), cloneRbdVol.RbdImageName, snap.RbdSnapName, err)
-		err = errors.Errorf("failed to clone rbd image %s from snapshot %s: %v", cloneRbdVol.RbdImageName, snap.RbdSnapName, err)
+		err = errors.Errorf("failed to clone rbd image %s from snapshot %s: %w", cloneRbdVol.RbdImageName, snap.RbdSnapName, err)
 	}
 	errSnap := parentVol.deleteSnapshot(ctx, snap)
 	if errSnap != nil {
