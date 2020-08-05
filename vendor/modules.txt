@@ -2,7 +2,8 @@
 github.com/beorn7/perks/quantile
 # github.com/blang/semver v3.5.0+incompatible
 github.com/blang/semver
-# github.com/ceph/go-ceph v0.5.0
+# github.com/ceph/go-ceph v0.5.1-0.20201009152006-17cab5c47de9
+github.com/ceph/go-ceph/cephfs/admin
 github.com/ceph/go-ceph/internal/callbacks
 github.com/ceph/go-ceph/internal/cutil
 github.com/ceph/go-ceph/internal/errutil
