@@ -34,23 +34,28 @@ type CephFilesystemDetails struct {
 	MDSMap MDSMap `json:"mdsmap"`
 }
 
-func (vo *volumeOptions) getFscID(ctx context.Context, cr *util.Credentials) (int64, error) {
-	// ceph fs get myfs --format=json
-	// {"mdsmap":{...},"id":2}
-	var fsDetails CephFilesystemDetails
-	err := execCommandJSON(ctx, &fsDetails,
-		"ceph",
-		"-m", vo.Monitors,
-		"--id", cr.ID,
-		"--keyfile="+cr.KeyFile,
-		"-c", util.CephConfigPath,
-		"fs", "get", vo.FsName, "--format=json",
-	)
+func (vo *volumeOptions) getFscID(ctx context.Context) (int64, error) {
+	fsa, err := vo.conn.GetFSAdmin()
 	if err != nil {
+		util.ErrorLog(ctx, "could not get FSAdmin, can not fetch filesystem ID for %s:", vo.FsName, err)
 		return 0, err
 	}
 
-	return fsDetails.ID, nil
+	volumes, err := fsa.EnumerateVolumes()
+	if err != nil {
+		util.ErrorLog(ctx, "could not list volumes, can not fetch filesystem ID for %s:", vo.FsName, err)
+		return 0, err
+	}
+
+	for _, vol := range volumes {
+		if vol.Name == vo.FsName {
+			return vol.ID, nil
+		}
+	}
+
+	err = fmt.Errorf("volume %s not found", vo.FsName)
+	util.ErrorLog(ctx, "failed o list volume %s: %s", vo.FsName, err)
+	return 0, err
 }
 
 // CephFilesystem is a representation of the json structure returned by 'ceph fs ls'.
