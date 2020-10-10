@@ -250,7 +250,6 @@ func newVolumeOptionsFromVolID(ctx context.Context, volID string, volOpt, secret
 		vi         util.CSIIdentifier
 		volOptions volumeOptions
 		vid        volumeIdentifier
-		info       Subvolume
 	)
 
 	// Decode the VolID first, to detect older volumes or pre-provisioned volumes
@@ -332,7 +331,7 @@ func newVolumeOptionsFromVolID(ctx context.Context, volID string, volOpt, secret
 
 	volOptions.ProvisionVolume = true
 
-	info, err = volOptions.getSubVolumeInfo(ctx, cr, volumeID(vid.FsSubvolName))
+	info, err := volOptions.getSubVolumeInfo(ctx, cr, volumeID(vid.FsSubvolName))
 	if err == nil {
 		volOptions.RootPath = info.Path
 		volOptions.Features = info.Features

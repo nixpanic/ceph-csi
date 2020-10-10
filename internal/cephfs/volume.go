@@ -44,23 +44,12 @@ const (
 	modeAllRWX = 0777
 )
 
-// Subvolume holds subvolume information.
+// Subvolume holds subvolume information. This includes only the needed members
+// from fsAdmin.SubVolumeInfo.
 type Subvolume struct {
-	BytesQuota    int      `json:"bytes_quota"`
-	DataPool      string   `json:"data_pool"`
-	Features      []string `json:"features"`
-	GID           int      `json:"gid"`
-	Mode          int      `json:"mode"`
-	MonAddrs      []string `json:"mon_addrs"`
-	Path          string   `json:"path"`
-	PoolNamespace string   `json:"pool_namespace"`
-	// The subvolume "state" is based on the current state of the subvolume.
-	// It contains one of the following values:
-	// * "complete": subvolume is ready for all operations.
-	// * "snapshot-retained": subvolume is removed but its snapshots are retained.
-	State string `json:"state"`
-	Type  string `json:"type"`
-	UID   int    `json:"uid"`
+	BytesQuota int64
+	Path       string
+	Features   []string
 }
 
 func getVolumeRootPathCephDeprecated(volID volumeID) string {
@@ -94,36 +83,38 @@ func getVolumeRootPathCeph(ctx context.Context, volOptions *volumeOptions, cr *u
 	return strings.TrimSuffix(stdout, "\n"), nil
 }
 
-func (vo *volumeOptions) getSubVolumeInfo(ctx context.Context, cr *util.Credentials, volID volumeID) (Subvolume, error) {
-	info := Subvolume{}
-	err := execCommandJSON(
-		ctx,
-		&info,
-		"ceph",
-		"fs",
-		"subvolume",
-		"info",
-		vo.FsName,
-		string(volID),
-		"--group_name",
-		vo.SubvolumeGroup,
-		"-m", vo.Monitors,
-		"-c", util.CephConfigPath,
-		"-n", cephEntityClientPrefix+cr.ID,
-		"--keyfile="+cr.KeyFile)
+func (vo *volumeOptions) getSubVolumeInfo(ctx context.Context, cr *util.Credentials, volID volumeID) (*Subvolume, error) {
+	fsa, err := vo.conn.GetFSAdmin()
+	if err != nil {
+		util.ErrorLog(ctx, "could not get FSAdmin, can not fetch metadata pool for %s:", vo.FsName, err)
+		return nil, err
+	}
+
+	info, err := fsa.SubVolumeInfo(vo.FsName, vo.SubvolumeGroup, string(volID))
 	if err != nil {
 		util.ErrorLog(ctx, "failed to get subvolume info for the vol %s: %s", string(volID), err)
 		if strings.HasPrefix(err.Error(), volumeNotFound) {
-			return info, ErrVolumeNotFound
+			return nil, ErrVolumeNotFound
 		}
 		// Incase the error is other than invalid command return error to the caller.
 		if !strings.Contains(err.Error(), invalidCommand) {
-			return info, ErrInvalidCommand
+			return nil, ErrInvalidCommand
 		}
 
-		return info, err
+		return nil, err
 	}
-	return info, nil
+
+	subvol := Subvolume{
+		// FIXME: info.BytesQuota could be of type fsAdmin.Infinite
+		BytesQuota: int64(info.BytesQuota.(fsAdmin.ByteCount)),
+		Path:       info.Path,
+		Features:   make([]string, len(info.Features)),
+	}
+	for i, feature := range info.Features {
+		subvol.Features[i] = string(feature)
+	}
+
+	return &subvol, nil
 }
 
 type localClusterState struct {
