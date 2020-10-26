@@ -7,6 +7,7 @@ def ref = "master"
 def git_since = 'master'
 def workdir = '/opt/build/go/src/github.com/ceph/ceph-csi'
 def doc_change = 0
+def CACHED_IMAGE='CACHED_IMAGE=image-registry.openshift-image-registry.svc.apps.ocp.ci.centos.org:5000/ceph-csi/ceph-csi:test'
 
 node('cico-workspace') {
 
@@ -60,6 +61,9 @@ node('cico-workspace') {
 			sh 'scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no ./prepare.sh root@${CICO_NODE}:'
 			// TODO: already checked out the PR on the node, scp the contents?
 			sh "ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no root@${CICO_NODE} ./prepare.sh --workdir=${workdir} --gitrepo=${git_repo} --ref=${ref}"
+		}
+		stage('pull cached image') {
+			sh "ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no root@${CICO_NODE} 'cd /opt/build/go/src/github.com/ceph/ceph-csi && make .test-container-id ${CACHED_IMAGE} CONTAINER_CMD=podman'"
 		}
 		stage('test & build') {
 			parallel test: {

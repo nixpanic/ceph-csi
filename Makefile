@@ -69,11 +69,21 @@ containerized-test: REBASE ?= 0
 containerized-test: .test-container-id
 	$(CONTAINER_CMD) run --rm -v $(PWD):/go/src/github.com/ceph/ceph-csi$(SELINUX_VOL_FLAG) $(CSI_IMAGE_NAME):test make $(TARGET) GIT_SINCE=$(GIT_SINCE) REBASE=$(REBASE)
 
+# if CACHED_IMAGE is set, do not build the image, but pull it from the location
+# and store the Id in the .test-container-id file
+ifeq ($(CACHED_IMAGE),)
 # create a (cached) container image with dependencies for testing the CI jobs
 .test-container-id: scripts/Dockerfile.test
 	[ ! -f .test-container-id ] || $(CONTAINER_CMD) rmi $(CSI_IMAGE_NAME):test
 	$(CONTAINER_CMD) build $(CPUSET) -t $(CSI_IMAGE_NAME):test -f ./scripts/Dockerfile.test .
 	$(CONTAINER_CMD) inspect -f '{{.Id}}' $(CSI_IMAGE_NAME):test > .test-container-id
+else
+# pull a prebuilt container image
+.test-container-id:
+	$(CONTAINER_CMD) pull $(CACHED_IMAGE)
+	$(CONTAINER_CMD) tag $(CACHED_IMAGE) $(CSI_IMAGE_NAME):test
+	$(CONTAINER_CMD) inspect -f '{{.Id}}' $(CSI_IMAGE_NAME):test > .test-container-id
+endif
 
 clean:
 	[ ! -f .test-container-id ] || $(CONTAINER_CMD) rmi $(CSI_IMAGE_NAME):test
