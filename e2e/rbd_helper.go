@@ -314,6 +314,46 @@ func deleteBackingRBDImage(f *framework.Framework, pvc *v1.PersistentVolumeClaim
 	return err
 }
 
+// backingRBDImageHasExtents runs `rbd diff` on the RBD image to fetch a list
+// of extents that have been allocated for this image. A newly created image,
+// where nothing has been written to, will not have any extents in the output,
+// so the list (stdout) will be empty.
+func backingRBDImageHasExtents(f *framework.Framework, pvc *v1.PersistentVolumeClaim) (bool, error) {
+	imageData, err := getImageInfoFromPVC(pvc.Namespace, pvc.Name, f)
+	if err != nil {
+		return false, err
+	}
+
+	cmd := fmt.Sprintf("rbd diff %s %s", rbdOptions(defaultRBDPool), imageData.imageName)
+	stdout, stderr, err := execCommandInToolBoxPod(f, cmd, rookNamespace)
+	if err != nil {
+		return false, err
+	}
+	if stderr != "" {
+		return false, fmt.Errorf("command %q returned error output: %s", cmd, stderr)
+	}
+	if stdout == "" {
+		return false, nil
+	}
+
+	return true, nil
+}
+
+// sparsifyBackingRBDImage runs `rbd sparsify` on the RBD image. Once done, all
+// data blocks that contain zeros are discarded/trimmed/unmapped and do not
+// take up any space anymore. This can be used to verify that an empty, but
+// allocated (with zerofill) extents have been released.
+func sparsifyBackingRBDImage(f *framework.Framework, pvc *v1.PersistentVolumeClaim) error {
+	imageData, err := getImageInfoFromPVC(pvc.Namespace, pvc.Name, f)
+	if err != nil {
+		return err
+	}
+
+	cmd := fmt.Sprintf("rbd sparsify %s %s", rbdOptions(defaultRBDPool), imageData.imageName)
+	_, _, err = execCommandInToolBoxPod(f, cmd, rookNamespace)
+	return err
+}
+
 func deletePool(name string, cephfs bool, f *framework.Framework) error {
 	var cmds = []string{}
 	if cephfs {

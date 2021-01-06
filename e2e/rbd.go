@@ -1297,6 +1297,67 @@ var _ = Describe("RBD", func() {
 				validateRBDImageCount(f, 0)
 			})
 
+			By("create a thick-provisioned PVC", func() {
+				err := deleteResource(rbdExamplePath + "storageclass.yaml")
+				if err != nil {
+					e2elog.Failf("failed to delete storageclass with error %v", err)
+				}
+				err = createRBDStorageClass(f.ClientSet, f, nil, map[string]string{
+					"thickProvision": "true"}, deletePolicy)
+				if err != nil {
+					e2elog.Failf("failed to create storageclass with error %v", err)
+				}
+
+				pvc, err := loadPVC(pvcPath)
+				if err != nil {
+					e2elog.Failf("failed to load PVC with error %v", err)
+				}
+				pvc.Namespace = f.UniqueName
+
+				err = createPVCAndvalidatePV(f.ClientSet, pvc, deployTimeout)
+				if err != nil {
+					e2elog.Failf("failed to create PVC with error %v", err)
+				}
+				validateRBDImageCount(f, 1)
+
+				// nothing has been written, but the extents should be allocated
+				extents, err := backingRBDImageHasExtents(f, pvc)
+				if err != nil {
+					e2elog.Failf("failed to get allocations of RBD image: %v", err)
+				} else if !extents {
+					e2elog.Failf("backing RBD image is not thick-provisioned")
+				}
+
+				// thick provisioning allows for sparsifying
+				err = sparsifyBackingRBDImage(f, pvc)
+				if err != nil {
+					e2elog.Failf("failed to sparsify RBD image: %v", err)
+				}
+
+				// after sparsifying the image should not have any allocated extents
+				extents, err = backingRBDImageHasExtents(f, pvc)
+				if err != nil {
+					e2elog.Failf("backing RBD image is not thick-provisioned: %v", err)
+				} else if extents {
+					e2elog.Failf("backing RBD image was not sparsified")
+				}
+
+				err = deletePVCAndValidatePV(f.ClientSet, pvc, deployTimeout)
+				if err != nil {
+					e2elog.Failf("failed to delete PVC with error: %v", err)
+				}
+				validateRBDImageCount(f, 0)
+
+				err = deleteResource(rbdExamplePath + "storageclass.yaml")
+				if err != nil {
+					e2elog.Failf("failed to delete storageclass with error %v", err)
+				}
+				err = createRBDStorageClass(f.ClientSet, f, nil, nil, deletePolicy)
+				if err != nil {
+					e2elog.Failf("failed to create storageclass with error %v", err)
+				}
+			})
+
 			By("create a PVC and Bind it to an app for mapped rbd image with options", func() {
 				err := deleteResource(rbdExamplePath + "storageclass.yaml")
 				if err != nil {
