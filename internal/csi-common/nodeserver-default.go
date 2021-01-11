@@ -112,6 +112,19 @@ func (ns *DefaultNodeServer) NodeGetVolumeStats(ctx context.Context, req *csi.No
 
 	*/
 
+	stat, err := os.Stat(targetPath)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "failed to get stat for targetpath %q: %v", targetPath, err)
+	}
+
+	if stat.Mode().IsDir() {
+		return filesystemNodeGetVolumeStats(ctx, targetPath)
+	}
+
+	return nil, fmt.Errorf("targetpath %q is not a directory", targetPath)
+}
+
+func filesystemNodeGetVolumeStats(ctx context.Context, targetPath string) (*csi.NodeGetVolumeStatsResponse, error) {
 	isMnt, err := util.IsMountPoint(targetPath)
 
 	if err != nil {
