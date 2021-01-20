@@ -2,9 +2,7 @@ package e2e
 
 import (
 	"context"
-	"errors"
 
-	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/kubernetes/test/e2e/framework"
@@ -45,19 +43,13 @@ func checkNodeHasLabel(c kubernetes.Interface, labelKey, labelValue string) erro
 	return nil
 }
 
-// List all nodes in the cluster (we have one), and return the IP-address.
+// List all nodes in the cluster (we have one), and return the (host)name.
 // Possibly need to add a selector, pick the node where a Pod is running?
-func getKubeletIP(c kubernetes.Interface) (string, error) {
+func getKubeletNode(c kubernetes.Interface) (string, error) {
 	nodes, err := c.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		return "", err
 	}
 
-	for _, address := range nodes.Items[0].Status.Addresses {
-		if address.Type == core.NodeInternalIP {
-			return address.Address, nil
-		}
-	}
-
-	return "", errors.New("could not find internal IP for node")
+	return nodes.Items[0].Name, nil
 }
