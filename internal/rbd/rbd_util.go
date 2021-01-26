@@ -1059,6 +1059,32 @@ func (rv *rbdVolume) cloneRbdImageFromSnapshot(ctx context.Context, pSnapOpts *r
 		return fmt.Errorf("failed to create rbd clone: %w", err)
 	}
 
+	// delete the cloned image if a next step fails
+	deleteClone := true
+	defer func() {
+		if deleteClone {
+			err = librbd.RemoveImage(rv.ioctx, rv.RbdImageName)
+			if err != nil {
+				util.ErrorLog(ctx, "failed to delete temporary image %q: %v", rv.String(), err)
+			}
+		}
+	}()
+
+	if rv.isEncrypted() {
+		err = pSnapOpts.Connect(rv.conn.Creds)
+		if err != nil {
+			return fmt.Errorf("failed to connect image %q: %w", pSnapOpts.String(), err)
+		}
+
+		err = rv.copyEncryptionConfig(&pSnapOpts.rbdImage)
+		if err != nil {
+			return fmt.Errorf("failed to clone encryption config: %w", err)
+		}
+	}
+
+	// Success! Do not delete the cloned image now :)
+	deleteClone = false
+
 	return nil
 }
 
