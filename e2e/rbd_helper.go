@@ -314,29 +314,35 @@ func deleteBackingRBDImage(f *framework.Framework, pvc *v1.PersistentVolumeClaim
 	return err
 }
 
-// backingRBDImageHasExtents runs `rbd diff` on the RBD image to fetch a list
-// of extents that have been allocated for this image. A newly created image,
-// where nothing has been written to, will not have any extents in the output,
-// so the list (stdout) will be empty.
-func backingRBDImageHasExtents(f *framework.Framework, pvc *v1.PersistentVolumeClaim) (bool, error) {
+// rbdImageDu contains the disk-usage statistics of an RBD image.
+type rbdImageDu struct {
+	Name            string `json:"name"`
+	ProvisionedSize uint64 `json:"provisioned_size"`
+	UsedSize        uint64 `json:"used_size"`
+}
+
+// getRbdDu runs 'rbd du' on the RBD image and returns a rbdImageDu struct with
+// the result.
+func getRbdDu(f *framework.Framework, pvc *v1.PersistentVolumeClaim) (*rbdImageDu, error) {
+	du := rbdImageDu{}
+
 	imageData, err := getImageInfoFromPVC(pvc.Namespace, pvc.Name, f)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 
-	cmd := fmt.Sprintf("rbd diff %s %s", rbdOptions(defaultRBDPool), imageData.imageName)
-	stdout, stderr, err := execCommandInToolBoxPod(f, cmd, rookNamespace)
+	cmd := fmt.Sprintf("rbd du --format=json %s %s", rbdOptions(defaultRBDPool), imageData.imageName)
+	stdout, _, err := execCommandInToolBoxPod(f, cmd, rookNamespace)
 	if err != nil {
-		return false, err
-	}
-	if stderr != "" {
-		return false, fmt.Errorf("command %q returned error output: %s", cmd, stderr)
-	}
-	if stdout == "" {
-		return false, nil
+		return nil, err
 	}
 
-	return true, nil
+	err = json.Unmarshal([]byte(stdout), &du)
+	if err != nil {
+		return nil, err
+	}
+
+	return &du, nil
 }
 
 // sparsifyBackingRBDImage runs `rbd sparsify` on the RBD image. Once done, all

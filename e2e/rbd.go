@@ -1320,12 +1320,12 @@ var _ = Describe("RBD", func() {
 				}
 				validateRBDImageCount(f, 1)
 
-				// nothing has been written, but the extents should be allocated
-				extents, err := backingRBDImageHasExtents(f, pvc)
+				// nothing has been written, but the image should be allocated
+				du, err := getRbdDu(f, pvc)
 				if err != nil {
 					e2elog.Failf("failed to get allocations of RBD image: %v", err)
-				} else if !extents {
-					e2elog.Failf("backing RBD image is not thick-provisioned")
+				} else if du.UsedSize != du.ProvisionedSize {
+					e2elog.Failf("backing RBD image is not thick-provisioned (%d/%d)", du.UsedSize, du.ProvisionedSize)
 				}
 
 				// thick provisioning allows for sparsifying
@@ -1334,11 +1334,11 @@ var _ = Describe("RBD", func() {
 					e2elog.Failf("failed to sparsify RBD image: %v", err)
 				}
 
-				// after sparsifying the image should not have any allocated extents
-				extents, err = backingRBDImageHasExtents(f, pvc)
+				// after sparsifying the image should not have any allocations
+				du, err = getRbdDu(f, pvc)
 				if err != nil {
 					e2elog.Failf("backing RBD image is not thick-provisioned: %v", err)
-				} else if extents {
+				} else if du.UsedSize != 0 {
 					e2elog.Failf("backing RBD image was not sparsified")
 				}
 
