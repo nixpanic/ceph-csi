@@ -66,7 +66,7 @@ func GetKMS(tenant, kmsID string, secrets map[string]string) (EncryptionKMS, err
 	section, ok := config[kmsID]
 	if !ok {
 		return nil, fmt.Errorf("could not get KMS configuration "+
-			"for %q", kmsID)
+			"for %q (have %v)", kmsID, getKeys(config))
 	}
 
 	// kmsConfig can have additional sub-sections
