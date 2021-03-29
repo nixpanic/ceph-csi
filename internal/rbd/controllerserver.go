@@ -753,12 +753,6 @@ func (cs *ControllerServer) CreateSnapshot(ctx context.Context, req *csi.CreateS
 		return nil, err
 	}
 
-	// TODO: re-encrypt snapshot with a new passphrase
-	if rbdVol.isEncrypted() {
-		return nil, status.Errorf(codes.Unimplemented, "source Volume %s is encrypted, "+
-			"snapshotting is not supported currently", rbdVol.VolID)
-	}
-
 	// Check if source volume was created with required image features for snaps
 	if !rbdVol.hasSnapshotFeature() {
 		return nil, status.Errorf(codes.InvalidArgument, "volume(%s) has not snapshot feature(layering)", req.GetSourceVolumeId())
@@ -806,6 +800,16 @@ func (cs *ControllerServer) CreateSnapshot(ctx context.Context, req *csi.CreateS
 			return nil, status.Errorf(codes.Internal, err.Error())
 		}
 		defer vol.Destroy()
+
+		if rbdVol.isEncrypted() {
+			cryptErr := rbdVol.copyEncryptionConfig(&rbdVol.rbdImage)
+			if cryptErr != nil {
+				util.WarningLog(ctx, "failed copy encryption "+
+					"config for %q: %v", vol.String(),
+					req.GetName(), cryptErr)
+			}
+			return nil, status.Errorf(codes.Internal, err.Error())
+		}
 
 		err = vol.flattenRbdImage(ctx, cr, false, rbdHardMaxCloneDepth, rbdSoftMaxCloneDepth)
 		if errors.Is(err, ErrFlattenInProgress) {
