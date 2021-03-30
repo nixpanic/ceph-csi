@@ -720,7 +720,7 @@ func (rv *rbdVolume) checkImageChainHasFeature(ctx context.Context, feature uint
 
 // genSnapFromSnapID generates a rbdSnapshot structure from the provided identifier, updating
 // the structure with elements from on-disk snapshot metadata as well.
-func genSnapFromSnapID(ctx context.Context, rbdSnap *rbdSnapshot, snapshotID string, cr *util.Credentials) error {
+func genSnapFromSnapID(ctx context.Context, rbdSnap *rbdSnapshot, snapshotID string, cr *util.Credentials, secrets map[string]string) error {
 	var (
 		options map[string]string
 		vi      util.CSIIdentifier
@@ -776,6 +776,13 @@ func genSnapFromSnapID(ctx context.Context, rbdSnap *rbdSnapshot, snapshotID str
 		rbdSnap.JournalPool, err = util.GetPoolName(rbdSnap.Monitors, cr, imageAttributes.JournalPoolID)
 		if err != nil {
 			// TODO: If pool is not found we may leak the image (as DeleteSnapshot will return success)
+			return err
+		}
+	}
+
+	if imageAttributes.KmsID != "" {
+		err = rbdSnap.configureEncryption(imageAttributes.KmsID, secrets)
+		if err != nil {
 			return err
 		}
 	}
