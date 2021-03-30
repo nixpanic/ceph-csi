@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime" // used for debugging only
 	"strconv"
 	"strings"
 
@@ -87,6 +88,12 @@ func (ri *rbdImage) ensureEncryptionMetadataSet(status rbdEncryptionState) error
 
 // isEncrypted returns `true` if the rbdImage is (or needs to be) encrypted.
 func (ri *rbdImage) isEncrypted() bool {
+	// TODO: remove debugging
+	stack := make([]byte, 2048)
+	_ = runtime.Stack(stack, false)
+	util.DebugLog(context.TODO(), "isEncrypted() called through: \n%s\n", string(stack))
+	util.DebugLog(context.TODO(), "enctyption for %q in enabled: %v", ri.String(), ri.encryption != nil)
+
 	return ri.encryption != nil
 }
 
