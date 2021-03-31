@@ -189,6 +189,15 @@ func (kms *AWSMetadataKMS) EncryptDEK(volumeID, plainDEK string) (string, error)
 		return "", fmt.Errorf("failed to encrypt DEK: %w", err)
 	}
 
+	// FIXME: remove debugging
+	DefaultLog("successfully encrypted DEK: \n"+
+		"- plainDEK (quoted string):     %q\n"+
+		"- encryptedDEK ([]byte):        %v\n"+
+		"- encryptedDEK (quoted string): %q\n"+
+		"- algirithm:                    %s\n",
+		plainDEK, result.CiphertextBlob, string(result.CiphertextBlob),
+		result.EncryptionAlgorithm)
+
 	return string(result.CiphertextBlob), nil
 }
 
