@@ -987,17 +987,20 @@ func genSnapFromOptions(ctx context.Context, rbdVol *rbdVolume, snapOptions map[
 		rbdSnap.NamePrefix = namePrefix
 	}
 
-	if rbdVol.isEncrypted() {
-		err = rbdSnap.Connect(rbdVol.conn.Creds)
-		if err != nil {
-			return nil, fmt.Errorf("failed to connect image %q: %w", rbdSnap.String(), err)
-		}
+	// FIXME: rbdSnap.VolID is not set
+	/*
+		if rbdVol.isEncrypted() {
+			err = rbdSnap.Connect(rbdVol.conn.Creds)
+			if err != nil {
+				return nil, fmt.Errorf("failed to connect image %q: %w", rbdSnap.String(), err)
+			}
 
-		err = rbdVol.copyEncryptionConfig(&rbdSnap.rbdImage)
-		if err != nil {
-			return nil, fmt.Errorf("failed to clone encryption config: %w", err)
+			err = rbdVol.copyEncryptionConfig(&rbdSnap.rbdImage)
+			if err != nil {
+				return nil, fmt.Errorf("failed to clone encryption config: %w", err)
+			}
 		}
-	}
+	*/
 
 	return rbdSnap, nil
 }
