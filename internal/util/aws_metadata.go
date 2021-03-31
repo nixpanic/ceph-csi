@@ -18,6 +18,7 @@ package util
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 
@@ -189,16 +190,22 @@ func (kms *AWSMetadataKMS) EncryptDEK(volumeID, plainDEK string) (string, error)
 		return "", fmt.Errorf("failed to encrypt DEK: %w", err)
 	}
 
+	// base64 encode the encrypted DEK, so that storing it should not have
+	// issues
+	encryptedDEK :=
+		base64.StdEncoding.EncodeToString(result.CiphertextBlob)
+
 	// FIXME: remove debugging
 	DefaultLog("successfully encrypted DEK: \n"+
 		"- plainDEK (quoted string):     %q\n"+
 		"- encryptedDEK ([]byte):        %v\n"+
 		"- encryptedDEK (quoted string): %q\n"+
+		"- encryptedDEK (base64):        %s\n"+
 		"- algirithm:                    %s\n",
 		plainDEK, result.CiphertextBlob, string(result.CiphertextBlob),
-		result.EncryptionAlgorithm)
+		encryptedDEK, result.EncryptionAlgorithm)
 
-	return string(result.CiphertextBlob), nil
+	return encryptedDEK, nil
 }
 
 // DecryptDEK uses the Amazon KMS and the configured CMK to decrypt the DEK.
@@ -208,8 +215,14 @@ func (kms *AWSMetadataKMS) DecryptDEK(volumeID, encryptedDEK string) (string, er
 		return "", fmt.Errorf("could not get KMS service: %w", err)
 	}
 
+	ciphertextBlob, err := base64.StdEncoding.DecodeString(encryptedDEK)
+	if err != nil {
+		return "", fmt.Errorf("failed to decode base64 cipher: %w",
+			err)
+	}
+
 	result, err := svc.Decrypt(&awsKMS.DecryptInput{
-		CiphertextBlob: []byte(encryptedDEK),
+		CiphertextBlob: ciphertextBlob,
 	})
 	if err != nil {
 		return "", fmt.Errorf("failed to decrypt DEK: %w", err)
