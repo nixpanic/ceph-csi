@@ -1105,13 +1105,13 @@ func (rv *rbdVolume) cloneRbdImageFromSnapshot(ctx context.Context, pSnapOpts *r
 		}
 	}()
 
-	if rv.isEncrypted() {
+	if pSnapOpts.isEncrypted() {
 		err = pSnapOpts.Connect(rv.conn.Creds)
 		if err != nil {
 			return fmt.Errorf("failed to connect image %q: %w", pSnapOpts.String(), err)
 		}
 
-		err = rv.copyEncryptionConfig(&pSnapOpts.rbdImage)
+		err = pSnapOpts.copyEncryptionConfig(&rv.rbdImage)
 		if err != nil {
 			return fmt.Errorf("failed to clone encryption config: %w", err)
 		}
