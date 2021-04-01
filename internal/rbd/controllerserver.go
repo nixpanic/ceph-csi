@@ -159,14 +159,6 @@ func (cs *ControllerServer) parseVolCreateRequest(ctx context.Context, req *csi.
 }
 
 func buildCreateVolumeResponse(ctx context.Context, req *csi.CreateVolumeRequest, rbdVol *rbdVolume) (*csi.CreateVolumeResponse, error) {
-	if rbdVol.isEncrypted() {
-		err := rbdVol.setupEncryption(ctx)
-		if err != nil {
-			util.ErrorLog(ctx, err.Error())
-			return nil, status.Error(codes.Internal, err.Error())
-		}
-	}
-
 	volumeContext := req.GetParameters()
 	volumeContext["pool"] = rbdVol.Pool
 	volumeContext["journalPool"] = rbdVol.JournalPool
@@ -261,6 +253,13 @@ func (cs *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 	if err != nil {
 		util.ErrorLog(ctx, "failed to connect to volume %v: %v", rbdVol.RbdImageName, err)
 		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if rbdVol.isEncrypted() {
+		err := rbdVol.setupEncryption(ctx)
+		if err != nil {
+			util.ErrorLog(ctx, err.Error())
+			return nil, status.Error(codes.Internal, err.Error())
+		}
 	}
 
 	parentVol, rbdSnap, err := checkContentSource(ctx, req, cr)
