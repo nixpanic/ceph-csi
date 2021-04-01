@@ -312,15 +312,6 @@ func (cs *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 		return nil, err
 	}
 
-	// reserveVol sets rbdVol.VolID which is used by setupEncryption()
-	if rbdVol.isEncrypted() {
-		err := rbdVol.setupEncryption(ctx)
-		if err != nil {
-			util.ErrorLog(ctx, err.Error())
-			return nil, status.Error(codes.Internal, err.Error())
-		}
-	}
-
 	volumeContext := req.GetParameters()
 	volumeContext["pool"] = rbdVol.Pool
 	volumeContext["journalPool"] = rbdVol.JournalPool
@@ -525,13 +516,6 @@ func (cs *ControllerServer) createBackingImage(ctx context.Context, cr *util.Cre
 		if err != nil {
 			util.ErrorLog(ctx, "failed to flatten image %s: %v", rbdVol, err)
 			return err
-		}
-	}
-	if rbdVol.isEncrypted() {
-		err = rbdVol.setupEncryption(ctx)
-		if err != nil {
-			util.ErrorLog(ctx, "failed to setup encroption for image %s: %v", rbdVol, err)
-			return status.Error(codes.Internal, err.Error())
 		}
 	}
 	return nil

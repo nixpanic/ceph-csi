@@ -216,6 +216,10 @@ func (rv *rbdVolume) createCloneFromImage(ctx context.Context, parentVol *rbdVol
 	kmsID := ""
 	if rv.isEncrypted() {
 		kmsID = rv.encryption.GetID()
+		err = parentVol.copyEncryptionConfig(&rv.rbdImage)
+		if err != nil {
+			return fmt.Errorf("failed to copy encryption config for %q: %w", rv, err)
+		}
 	}
 	err = j.StoreImageID(ctx, rv.JournalPool, rv.ReservedID, rv.ImageID,
 		kmsID, rv.Owner)
