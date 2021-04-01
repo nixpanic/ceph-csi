@@ -310,6 +310,14 @@ func (cs *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 		}
 	}()
 
+	err = cs.createBackingImage(ctx, cr, req.GetSecrets(), rbdVol, parentVol, rbdSnap)
+	if err != nil {
+		if errors.Is(err, ErrFlattenInProgress) {
+			return nil, status.Error(codes.Aborted, err.Error())
+		}
+		return nil, err
+	}
+
 	// reserveVol sets rbdVol.VolID which is used by setupEncryption()
 	if rbdVol.isEncrypted() {
 		err := rbdVol.setupEncryption(ctx)
@@ -317,14 +325,6 @@ func (cs *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 			util.ErrorLog(ctx, err.Error())
 			return nil, status.Error(codes.Internal, err.Error())
 		}
-	}
-
-	err = cs.createBackingImage(ctx, cr, req.GetSecrets(), rbdVol, parentVol, rbdSnap)
-	if err != nil {
-		if errors.Is(err, ErrFlattenInProgress) {
-			return nil, status.Error(codes.Aborted, err.Error())
-		}
-		return nil, err
 	}
 
 	volumeContext := req.GetParameters()
