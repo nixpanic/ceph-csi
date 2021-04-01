@@ -259,14 +259,6 @@ func (cs *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 		return nil, getGRPCErrorForCreateVolume(err)
 	}
 
-	if rbdVol.isEncrypted() {
-		err := rbdVol.setupEncryption(ctx)
-		if err != nil {
-			util.ErrorLog(ctx, err.Error())
-			return nil, status.Error(codes.Internal, err.Error())
-		}
-	}
-
 	if found {
 		if rbdSnap != nil {
 			// check if image depth is reached limit and requires flatten
@@ -275,6 +267,15 @@ func (cs *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 				return nil, err
 			}
 		}
+
+		if rbdVol.isEncrypted() {
+			err := rbdVol.setupEncryption(ctx)
+			if err != nil {
+				util.ErrorLog(ctx, err.Error())
+				return nil, status.Error(codes.Internal, err.Error())
+			}
+		}
+
 		return buildCreateVolumeResponse(ctx, req, rbdVol)
 	}
 
@@ -302,6 +303,15 @@ func (cs *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 			}
 		}
 	}()
+
+	// reserveVol sets rbdVol.VolID which is used by setupEncryption()
+	if rbdVol.isEncrypted() {
+		err := rbdVol.setupEncryption(ctx)
+		if err != nil {
+			util.ErrorLog(ctx, err.Error())
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+	}
 
 	err = cs.createBackingImage(ctx, cr, req.GetSecrets(), rbdVol, parentVol, rbdSnap)
 	if err != nil {
