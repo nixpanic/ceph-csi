@@ -940,7 +940,9 @@ func (cs *ControllerServer) doSnapshotClone(ctx context.Context, parentVol *rbdV
 		}
 	}()
 
+	kmsID := ""
 	if parentVol.isEncrypted() {
+		kmsID = parentVol.encryption.GetID()
 		cryptErr := parentVol.copyEncryptionConfig(&cloneRbd.rbdImage)
 		if cryptErr != nil {
 			util.WarningLog(ctx, "failed copy encryption "+
@@ -972,7 +974,8 @@ func (cs *ControllerServer) doSnapshotClone(ctx context.Context, parentVol *rbdV
 	}
 	defer j.Destroy()
 
-	err = j.StoreImageID(ctx, rbdSnap.JournalPool, rbdSnap.ReservedID, cloneRbd.ImageID)
+	err = j.StoreImageID(ctx, rbdSnap.JournalPool, rbdSnap.ReservedID,
+		cloneRbd.ImageID, kmsID, parentVol.Owner)
 	if err != nil {
 		util.ErrorLog(ctx, "failed to reserve volume id: %v", err)
 		return ready, cloneRbd, err

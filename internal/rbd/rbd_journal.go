@@ -199,7 +199,14 @@ func checkSnapCloneExists(ctx context.Context, parentVol *rbdVolume, rbdSnap *rb
 			err = undoSnapshotCloning(ctx, vol, rbdSnap, vol, cr)
 			return false, err
 		}
-		sErr = j.StoreImageID(ctx, vol.JournalPool, vol.ReservedID, vol.ImageID)
+
+		kmsID := ""
+		if vol.isEncrypted() {
+			kmsID = vol.encryption.GetID()
+		}
+
+		sErr = j.StoreImageID(ctx, vol.JournalPool, vol.ReservedID,
+			vol.ImageID, kmsID, vol.Owner)
 		if sErr != nil {
 			util.ErrorLog(ctx, "failed to store volume id %s: %v", vol, sErr)
 			err = undoSnapshotCloning(ctx, vol, rbdSnap, vol, cr)
@@ -297,7 +304,9 @@ func (rv *rbdVolume) Exists(ctx context.Context, parentVol *rbdVolume) (bool, er
 			util.ErrorLog(ctx, "failed to get image id %s: %v", rv, err)
 			return false, err
 		}
-		err = j.StoreImageID(ctx, rv.JournalPool, rv.ReservedID, rv.ImageID)
+
+		err = j.StoreImageID(ctx, rv.JournalPool, rv.ReservedID,
+			rv.ImageID, kmsID, rv.Owner)
 		if err != nil {
 			util.ErrorLog(ctx, "failed to store volume id %s: %v", rv, err)
 			return false, err
@@ -608,7 +617,12 @@ func (rv *rbdVolume) storeImageID(ctx context.Context, j *journal.Connection) er
 		util.ErrorLog(ctx, "failed to get image id %s: %v", rv, err)
 		return err
 	}
-	err = j.StoreImageID(ctx, rv.JournalPool, rv.ReservedID, rv.ImageID)
+	kmsID := ""
+	if rv.isEncrypted() {
+		kmsID = rv.encryption.GetID()
+	}
+	err = j.StoreImageID(ctx, rv.JournalPool, rv.ReservedID, rv.ImageID,
+		kmsID, rv.Owner)
 	if err != nil {
 		util.ErrorLog(ctx, "failed to store volume id %s: %v", rv, err)
 		return err
