@@ -214,7 +214,12 @@ func (rv *rbdVolume) createCloneFromImage(ctx context.Context, parentVol *rbdVol
 		return err
 	}
 
-	err = j.StoreImageID(ctx, rv.JournalPool, rv.ReservedID, rv.ImageID)
+	kmsID := ""
+	if parentVol.isEncrypted() {
+		kmsID = parentVol.encryption.GetID()
+	}
+	err = j.StoreImageID(ctx, rv.JournalPool, rv.ReservedID, rv.ImageID,
+		kmsID, rv.Owner)
 	if err != nil {
 		util.ErrorLog(ctx, "failed to store volume %s: %v", rv, err)
 		return err
