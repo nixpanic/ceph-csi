@@ -248,13 +248,6 @@ func (cs *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 		util.ErrorLog(ctx, "failed to connect to volume %v: %v", rbdVol.RbdImageName, err)
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	if rbdVol.isEncrypted() {
-		err := rbdVol.setupEncryption(ctx)
-		if err != nil {
-			util.ErrorLog(ctx, err.Error())
-			return nil, status.Error(codes.Internal, err.Error())
-		}
-	}
 
 	parentVol, rbdSnap, err := checkContentSource(ctx, req, cr)
 	if err != nil {
@@ -265,6 +258,15 @@ func (cs *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 	if err != nil {
 		return nil, getGRPCErrorForCreateVolume(err)
 	}
+
+	if rbdVol.isEncrypted() {
+		err := rbdVol.setupEncryption(ctx)
+		if err != nil {
+			util.ErrorLog(ctx, err.Error())
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+	}
+
 	if found {
 		if rbdSnap != nil {
 			// check if image depth is reached limit and requires flatten
