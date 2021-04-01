@@ -938,8 +938,9 @@ func (cs *ControllerServer) doSnapshotClone(ctx context.Context, parentVol *rbdV
 		if cryptErr != nil {
 			util.WarningLog(ctx, "failed copy encryption "+
 				"config for %q: %v", cloneRbd.String(), cryptErr)
+			return ready, nil, status.Errorf(codes.Internal,
+				err.Error())
 		}
-		return ready, nil, status.Errorf(codes.Internal, err.Error())
 	}
 
 	err = cloneRbd.createSnapshot(ctx, rbdSnap)
