@@ -802,13 +802,14 @@ func (cs *ControllerServer) CreateSnapshot(ctx context.Context, req *csi.CreateS
 		defer vol.Destroy()
 
 		if rbdVol.isEncrypted() {
-			cryptErr := rbdVol.copyEncryptionConfig(&rbdVol.rbdImage)
+			cryptErr := rbdVol.copyEncryptionConfig(&vol.rbdImage)
 			if cryptErr != nil {
 				util.WarningLog(ctx, "failed copy encryption "+
 					"config for %q: %v", vol.String(),
 					req.GetName(), cryptErr)
+				return nil, status.Errorf(codes.Internal,
+					err.Error())
 			}
-			return nil, status.Errorf(codes.Internal, err.Error())
 		}
 
 		err = vol.flattenRbdImage(ctx, cr, false, rbdHardMaxCloneDepth, rbdSoftMaxCloneDepth)
