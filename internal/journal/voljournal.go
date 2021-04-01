@@ -691,9 +691,22 @@ func (conn *Connection) GetImageAttributes(ctx context.Context, pool, objectUUID
 }
 
 // StoreImageID stores the image ID in omap.
-func (conn *Connection) StoreImageID(ctx context.Context, pool, reservedUUID, imageID string) error {
-	err := setOMapKeys(ctx, conn, pool, conn.config.namespace, conn.config.cephUUIDDirectoryPrefix+reservedUUID,
-		map[string]string{conn.config.csiImageIDKey: imageID})
+func (conn *Connection) StoreImageID(ctx context.Context, pool, reservedUUID, imageID, kmsID, owner string) error {
+	cj := conn.config
+	values := map[string]string{
+		cj.csiImageIDKey: imageID,
+	}
+
+	// optional values used for encrypted volumes
+	if kmsID != "" {
+		values[cj.encryptKMSKey] = kmsID
+	}
+	if owner != "" {
+		values[cj.ownerKey] = owner
+	}
+
+	err := setOMapKeys(ctx, conn, pool, cj.namespace,
+		cj.cephUUIDDirectoryPrefix+reservedUUID, values)
 	if err != nil {
 		return err
 	}
