@@ -781,10 +781,22 @@ func genSnapFromSnapID(ctx context.Context, rbdSnap *rbdSnapshot, snapshotID str
 		}
 	}
 
+	err = rbdSnap.Connect(cr)
+	defer func() {
+		if err != nil {
+			rbdSnap.Destroy()
+		}
+	}()
+	if err != nil {
+		return fmt.Errorf("failed to connect to %q: %w",
+			rbdSnap.String(), err)
+	}
+
 	if imageAttributes.KmsID != "" {
 		err = rbdSnap.configureEncryption(imageAttributes.KmsID, secrets)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to configure encryption for "+
+				"%q: %w", rbdSnap.String(), err)
 		}
 	}
 
