@@ -3,14 +3,14 @@
 ## What works now 🥳
 
 1. snapshot (rbd images) have their DEK in the KMS
-2. restored from snapshot PVCs have **A WRONG KEY** DEK in the KMS
+2. restored from snapshot PVCs have the correct DEK in the KMS
 3. removed VolumeSnapshotContents delete their DEK from the KMS
 4. removed restored/cloned PVCs delete their DEK from the KMS
 
 ## What doesn't work yet
 
 1. encrypted PVCs have type "crypt_LUKS", not "crypt"?!
-1. restored-from-snapshot PVC has a wrong passphrase
+1. new clone-from-pvc PVC has a wrong passphrase
 
 ## What to validate
 

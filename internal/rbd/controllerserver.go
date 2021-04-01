@@ -268,8 +268,8 @@ func (cs *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 			}
 		}
 
-		if rbdVol.isEncrypted() {
-			err := rbdVol.setupEncryption(ctx)
+		if parentVol != nil && parentVol.isEncrypted() {
+			err := parentVol.copyEncryptionConfig(&rbdVol.rbdImage)
 			if err != nil {
 				util.ErrorLog(ctx, err.Error())
 				return nil, status.Error(codes.Internal, err.Error())
