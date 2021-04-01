@@ -214,7 +214,7 @@ func (rv *rbdVolume) createCloneFromImage(ctx context.Context, parentVol *rbdVol
 	}
 
 	kmsID := ""
-	if rv.isEncrypted() {
+	if parentVol.isEncrypted() {
 		kmsID = rv.encryption.GetID()
 		err = parentVol.copyEncryptionConfig(&rv.rbdImage)
 		if err != nil {
