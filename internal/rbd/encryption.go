@@ -101,6 +101,11 @@ func (ri *rbdImage) isEncrypted() bool {
 // - the Data-Encryption-Key (DEK) will be generated stored for use by the KMS;
 // - the RBD image will be marked to support encryption in its metadata.
 func (ri *rbdImage) setupEncryption(ctx context.Context) error {
+	// TODO: remove debugging
+	stack := make([]byte, 2048)
+	_ = runtime.Stack(stack, false)
+	util.DebugLog(context.TODO(), "setupEncryption() called for %q: %s\n", ri, string(stack))
+
 	err := ri.encryption.StoreNewCryptoPassphrase(ri.VolID)
 	if err != nil {
 		util.ErrorLog(ctx, "failed to save encryption passphrase for "+
