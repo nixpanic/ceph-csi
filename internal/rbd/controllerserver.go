@@ -194,8 +194,11 @@ func getGRPCErrorForCreateVolume(err error) error {
 // source snapshot or volume size, if there is a size mismatches it returns an error.
 func validateRequestedVolumeSize(rbdVol, parentVol *rbdVolume, rbdSnap *rbdSnapshot, cr *util.Credentials) error {
 	if rbdSnap != nil {
-		vol := generateVolFromSnap(rbdSnap)
-		err := vol.Connect(cr)
+		vol, err := generateVolFromSnap(rbdSnap)
+		if err != nil {
+			return status.Error(codes.Internal, err.Error())
+		}
+		err = vol.Connect(cr)
 		if err != nil {
 			return status.Error(codes.Internal, err.Error())
 		}
@@ -785,7 +788,11 @@ func (cs *ControllerServer) CreateSnapshot(ctx context.Context, req *csi.CreateS
 		return nil, status.Errorf(codes.Internal, err.Error())
 	}
 	if found {
-		vol := generateVolFromSnap(rbdSnap)
+		var vol *rbdVolume
+		vol, err = generateVolFromSnap(rbdSnap)
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
 		err = vol.Connect(cr)
 		if err != nil {
 			uErr := undoSnapshotCloning(ctx, vol, rbdSnap, vol, cr)
@@ -899,14 +906,17 @@ func (cs *ControllerServer) validateSnapshotReq(ctx context.Context, req *csi.Cr
 
 func (cs *ControllerServer) doSnapshotClone(ctx context.Context, parentVol *rbdVolume, rbdSnap *rbdSnapshot, cr *util.Credentials) (bool, *rbdVolume, error) {
 	// generate cloned volume details from snapshot
-	cloneRbd := generateVolFromSnap(rbdSnap)
+	cloneRbd, err := generateVolFromSnap(rbdSnap)
+	if err != nil {
+		return false, cloneRbd, err
+	}
 	defer cloneRbd.Destroy()
 	// add image feature for cloneRbd
 	f := []string{librbd.FeatureNameLayering, librbd.FeatureNameDeepFlatten}
 	cloneRbd.imageFeatureSet = librbd.FeatureSetFromNames(f)
 	ready := false
 
-	err := cloneRbd.Connect(cr)
+	err = cloneRbd.Connect(cr)
 	if err != nil {
 		return ready, cloneRbd, err
 	}
@@ -1043,7 +1053,10 @@ func (cs *ControllerServer) DeleteSnapshot(ctx context.Context, req *csi.DeleteS
 	// Deleting snapshot and cloned volume
 	util.DebugLog(ctx, "deleting cloned rbd volume %s", rbdSnap.RbdSnapName)
 
-	rbdVol := generateVolFromSnap(rbdSnap)
+	rbdVol, err := generateVolFromSnap(rbdSnap)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
 
 	err = rbdVol.Connect(cr)
 	if err != nil {
