@@ -149,7 +149,10 @@ func checkSnapCloneExists(ctx context.Context, parentVol *rbdVolume, rbdSnap *rb
 			snapData.ImagePool, rbdSnap.Pool)
 	}
 
-	vol := generateVolFromSnap(rbdSnap)
+	vol, err := generateVolFromSnap(rbdSnap)
+	if err != nil {
+		return false, fmt.Errorf("failed to convert snapshot to volume: %w", err)
+	}
 	defer vol.Destroy()
 	err = vol.Connect(cr)
 	if err != nil {
