@@ -79,7 +79,7 @@ func cleanUpSnapshot(ctx context.Context, parentVol *rbdVolume, rbdSnap *rbdSnap
 	return nil
 }
 
-func generateVolFromSnap(rbdSnap *rbdSnapshot) *rbdVolume {
+func generateVolFromSnap(rbdSnap *rbdSnapshot) (*rbdVolume, error) {
 	vol := new(rbdVolume)
 	vol.ClusterID = rbdSnap.ClusterID
 	vol.VolID = rbdSnap.VolID
@@ -89,7 +89,16 @@ func generateVolFromSnap(rbdSnap *rbdSnapshot) *rbdVolume {
 	vol.RadosNamespace = rbdSnap.RadosNamespace
 	vol.RbdImageName = rbdSnap.RbdSnapName
 	vol.ImageID = rbdSnap.ImageID
-	return vol
+
+	if rbdSnap.isEncrypted() {
+		vol.conn = rbdSnap.conn.Copy()
+		err := rbdSnap.copyEncryptionConfig(&vol.rbdImage)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return vol, nil
 }
 
 func undoSnapshotCloning(ctx context.Context, parentVol *rbdVolume, rbdSnap *rbdSnapshot, cloneVol *rbdVolume, cr *util.Credentials) error {
