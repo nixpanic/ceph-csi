@@ -90,12 +90,9 @@ func generateVolFromSnap(rbdSnap *rbdSnapshot) (*rbdVolume, error) {
 	vol.RbdImageName = rbdSnap.RbdSnapName
 	vol.ImageID = rbdSnap.ImageID
 
-	if rbdSnap.isEncrypted() {
-		vol.conn = rbdSnap.conn.Copy()
-		err := rbdSnap.copyEncryptionConfig(&vol.rbdImage)
-		if err != nil {
-			return nil, err
-		}
+	err := rbdSnap.repairEncryptionConfig(&vol.rbdImage)
+	if err != nil {
+		return nil, err
 	}
 
 	return vol, nil

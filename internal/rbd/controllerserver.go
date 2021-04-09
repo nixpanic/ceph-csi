@@ -814,15 +814,11 @@ func cloneFromSnapshot(ctx context.Context, rbdVol *rbdVolume, rbdSnap *rbdSnaps
 	}
 	defer vol.Destroy()
 
-	if rbdVol.isEncrypted() {
-		cryptErr := rbdVol.copyEncryptionConfig(&vol.rbdImage)
-		if cryptErr != nil {
-			util.WarningLog(ctx, "failed copy encryption "+
-				"config for %q: %v", vol.String(),
-				rbdSnap.RequestName, cryptErr)
-			return nil, status.Errorf(codes.Internal,
-				err.Error())
-		}
+	cryptErr := rbdVol.repairEncryptionConfig(&vol.rbdImage)
+	if cryptErr != nil {
+		util.WarningLog(ctx, "failed copy encryption config for %q: %v",
+			vol.String(), rbdSnap.RequestName, cryptErr)
+		return nil, status.Errorf(codes.Internal, err.Error())
 	}
 
 	// if flattening is not needed, the snapshot is ready for use
@@ -907,14 +903,11 @@ func (cs *ControllerServer) doSnapshotClone(ctx context.Context, parentVol *rbdV
 		}
 	}()
 
-	if parentVol.isEncrypted() {
-		cryptErr := parentVol.copyEncryptionConfig(&cloneRbd.rbdImage)
-		if cryptErr != nil {
-			util.WarningLog(ctx, "failed copy encryption "+
-				"config for %q: %v", cloneRbd.String(), cryptErr)
-			return ready, nil, status.Errorf(codes.Internal,
-				err.Error())
-		}
+	cryptErr := parentVol.repairEncryptionConfig(&cloneRbd.rbdImage)
+	if cryptErr != nil {
+		util.WarningLog(ctx, "failed copy encryption config for %q: %v",
+			cloneRbd.String(), cryptErr)
+		return ready, nil, status.Errorf(codes.Internal, err.Error())
 	}
 
 	err = cloneRbd.createSnapshot(ctx, rbdSnap)

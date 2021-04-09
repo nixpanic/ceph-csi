@@ -1117,13 +1117,9 @@ func (rv *rbdVolume) cloneRbdImageFromSnapshot(ctx context.Context, pSnapOpts *r
 		}
 	}()
 
-	if pSnapOpts.isEncrypted() {
-		pSnapOpts.conn = rv.conn.Copy()
-
-		err = pSnapOpts.copyEncryptionConfig(&rv.rbdImage)
-		if err != nil {
-			return fmt.Errorf("failed to clone encryption config: %w", err)
-		}
+	err = pSnapOpts.repairEncryptionConfig(&rv.rbdImage)
+	if err != nil {
+		return fmt.Errorf("failed to clone encryption config: %w", err)
 	}
 
 	// Success! Do not delete the cloned image now :)
