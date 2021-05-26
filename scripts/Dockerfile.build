@@ -1,0 +1,47 @@
+FROM ceph/ceph:v16 AS builder
+
+ARG GOROOT=/usr/local/go
+ARG GOARCH=amd64
+
+ENV GOPATH=/go
+ENV PATH=${GOROOT}/bin:${PATH}
+
+COPY build.env /
+
+RUN source /build.env \
+    && \
+    ( test -n "${GOARCH}" && exit 0; echo -e "\n\nMissing GOARCH argument for building image, install Golang or run: make containerized-build GOARCH=amd64\n\n"; exit 1 ) \
+    && mkdir -p /usr/local/go \
+    && curl https://storage.googleapis.com/golang/go${GOLANG_VERSION}.linux-${GOARCH}.tar.gz | tar xzf - -C ${GOROOT} --strip-components=1
+
+RUN dnf -y install \
+	make \
+	gcc \
+	git \
+	librados-devel \
+	librbd-devel \
+    && dnf -y update \
+    && dnf clean all \
+    && true
+
+ADD . /go/src/github.com/ceph/ceph-csi/
+RUN true \
+    && cd /go/src/github.com/ceph/ceph-csi \
+    && make \
+    && go build -o _output/csi-addons ./tools/csi-addons \
+    && true
+
+FROM ceph/ceph:v16
+LABEL maintainers="Ceph-CSI Authors"
+LABEL description="Ceph-CSI Plugin"
+
+# Removing ceph-iscsi repo to workaround the repo issue while upgrading
+#RUN rm -f /etc/yum.repos.d/ceph-iscsi.repo && yum -y update && yum clean all
+ENV CSIBIN=/usr/local/bin/cephcsi
+
+COPY --from=builder /go/src/github.com/ceph/ceph-csi/_output/cephcsi $CSIBIN
+COPY --from=builder /go/src/github.com/ceph/ceph-csi/_output/csi-addons /usr/local/bin/csi-addons
+
+RUN chmod +x $CSIBIN
+
+ENTRYPOINT ["/usr/local/bin/cephcsi"]
