@@ -1,0 +1,30 @@
+FROM ceph/ceph:v16 AS builder
+
+ENV GOPATH=/go
+
+RUN dnf -y install \
+	golang \
+	make \
+	git \
+	librados-devel \
+	librbd-devel \
+    && dnf -y update \
+    && dnf clean all \
+    && true
+
+ADD . /go/src/github.com/ceph/ceph-csi/
+RUN cd /go/src/github.com/ceph/ceph-csi && make
+
+FROM ceph/ceph:v16
+LABEL maintainers="Ceph-CSI Authors"
+LABEL description="Ceph-CSI Plugin"
+
+# Removing ceph-iscsi repo to workaround the repo issue while upgrading
+#RUN rm -f /etc/yum.repos.d/ceph-iscsi.repo && yum -y update && yum clean all
+ENV CSIBIN=/usr/local/bin/cephcsi
+
+COPY --from=builder /go/src/github.com/ceph/ceph-csi/_output/cephcsi $CSIBIN
+
+RUN chmod +x $CSIBIN
+
+ENTRYPOINT ["/usr/local/bin/cephcsi"]
