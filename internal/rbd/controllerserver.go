@@ -210,6 +210,39 @@ func validateRequestedVolumeSize(rbdVol, parentVol *rbdVolume, rbdSnap *rbdSnaps
 	return nil
 }
 
+func checkValidCreateVolumeRequest(rbdVol, parentVol *rbdVolume, rbdSnap *rbdSnapshot, cr *util.Credentials) error {
+	err := validateRequestedVolumeSize(rbdVol, parentVol, rbdSnap, cr)
+	if err != nil {
+		return err
+	}
+
+	return checkValidEncryptionRequest(parentVol, rbdVol, rbdSnap)
+}
+
+func checkValidEncryptionRequest(src, dest *rbdVolume, rbdSnap *rbdSnapshot) error {
+	// if snapshot is encrypted the request volume should also be encrypted
+	if rbdSnap != nil {
+		switch {
+		case rbdSnap.isEncrypted() && !dest.isEncrypted():
+			return status.Error(codes.InvalidArgument, "cannot create unencrypted volume from encrypted snapshot")
+
+		case !rbdSnap.isEncrypted() && dest.isEncrypted():
+			return status.Error(codes.InvalidArgument, "cannot create encrypted volume from unencrypted snapshot")
+		}
+	}
+	// if parent volume is encrypted the request volume should also be encrypted
+	if src != nil {
+		switch {
+		case src.isEncrypted() && !dest.isEncrypted():
+			return status.Error(codes.InvalidArgument, "cannot create unencrypted volume from encrypted volume")
+
+		case !src.isEncrypted() && dest.isEncrypted():
+			return status.Error(codes.InvalidArgument, "cannot create encrypted volume from unencrypted volume")
+		}
+	}
+	return nil
+}
+
 // CreateVolume creates the volume in backend.
 func (cs *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest) (*csi.CreateVolumeResponse, error) {
 	if err := cs.validateVolumeReq(ctx, req); err != nil {
@@ -254,7 +287,7 @@ func (cs *ControllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 		return cs.repairExistingVolume(ctx, req, cr, rbdVol, rbdSnap)
 	}
 
-	err = validateRequestedVolumeSize(rbdVol, parentVol, rbdSnap, cr)
+	err = checkValidCreateVolumeRequest(rbdVol, parentVol, rbdSnap, cr)
 	if err != nil {
 		return nil, err
 	}

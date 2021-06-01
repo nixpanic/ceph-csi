@@ -19,7 +19,11 @@ package rbd
 import (
 	"testing"
 
+	"github.com/ceph/ceph-csi/internal/util"
+
 	"github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestIsThickProvisionRequest(t *testing.T) {
@@ -65,5 +69,142 @@ func TestIsThickProvisionRequest(t *testing.T) {
 	req.Parameters["thickProvision"] = "true"
 	if !cs.isThickProvisionRequest(req) {
 		t.Errorf("request should be for thick-provisioning: %s", req.Parameters["thickProvision"])
+	}
+}
+
+func TestCheckValidEncryptionRequest(t *testing.T) {
+	secrets := map[string]string{
+		"encryptionPassphrase": "workflow test",
+	}
+
+	kms, err := util.GetKMS("tenant", "", secrets)
+	assert.NoError(t, err)
+	require.NotNil(t, kms)
+
+	ve, err := util.NewVolumeEncryption("", kms)
+
+	type args struct {
+		dest    *rbdVolume
+		src     *rbdVolume
+		rbdSnap *rbdSnapshot
+	}
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+	}{
+		{
+			name: "Parent snapshot is encrypted and request volume is not encrypted",
+			args: args{
+				dest: &rbdVolume{
+					rbdImage: rbdImage{encryption: nil},
+				},
+				src: nil,
+				rbdSnap: &rbdSnapshot{
+					rbdImage: rbdImage{encryption: ve},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "Parent snapshot is not encrypted and request volume is encrypted",
+			args: args{
+				dest: &rbdVolume{
+					rbdImage: rbdImage{encryption: ve},
+				},
+				src: nil,
+				rbdSnap: &rbdSnapshot{
+					rbdImage: rbdImage{encryption: nil},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "Parent snapshot is encrypted and request volume is also encrypted",
+			args: args{
+				dest: &rbdVolume{
+					rbdImage: rbdImage{encryption: ve},
+				},
+				src: nil,
+				rbdSnap: &rbdSnapshot{
+					rbdImage: rbdImage{encryption: ve},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "Parent snapshot is not encrypted and request volume is also not encrypted",
+			args: args{
+				dest: &rbdVolume{
+					rbdImage: rbdImage{encryption: nil},
+				},
+				src: nil,
+				rbdSnap: &rbdSnapshot{
+					rbdImage: rbdImage{encryption: nil},
+				},
+			},
+			wantErr: false,
+		},
+
+		{
+			name: "Parent volume is encrypted and request volume is not encrypted",
+			args: args{
+				dest: &rbdVolume{
+					rbdImage: rbdImage{encryption: nil},
+				},
+				src: &rbdVolume{
+					rbdImage: rbdImage{encryption: ve},
+				},
+				rbdSnap: nil,
+			},
+			wantErr: true,
+		},
+		{
+			name: "Parent snapshot is not encrypted and request volume is encrypted",
+			args: args{
+				dest: &rbdVolume{
+					rbdImage: rbdImage{encryption: ve},
+				},
+				src: &rbdVolume{
+					rbdImage: rbdImage{encryption: nil},
+				},
+				rbdSnap: nil,
+			},
+			wantErr: true,
+		},
+		{
+			name: "Parent snapshot is encrypted and request volume is also encrypted",
+			args: args{
+				dest: &rbdVolume{
+					rbdImage: rbdImage{encryption: ve},
+				},
+				src: &rbdVolume{
+					rbdImage: rbdImage{encryption: ve},
+				},
+				rbdSnap: nil,
+			},
+			wantErr: false,
+		},
+		{
+			name: "Parent snapshot is not encrypted and request volume is also not encrypted",
+			args: args{
+				dest: &rbdVolume{
+					rbdImage: rbdImage{encryption: nil},
+				},
+				src: &rbdVolume{
+					rbdImage: rbdImage{encryption: nil},
+				},
+				rbdSnap: nil,
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		et := tt
+		t.Run(et.name, func(t *testing.T) {
+			if err = checkValidEncryptionRequest(et.args.src, et.args.dest, et.args.rbdSnap); (err != nil) != et.wantErr {
+				t.Errorf("checkValidEncryptionRequest() error = %v, wantErr %v", err, et.wantErr)
+			}
+		})
 	}
 }
