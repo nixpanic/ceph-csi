@@ -216,30 +216,18 @@ func checkValidCreateVolumeRequest(rbdVol, parentVol *rbdVolume, rbdSnap *rbdSna
 		return err
 	}
 
-	return checkValidEncryptionRequest(parentVol, rbdVol, rbdSnap)
-}
-
-func checkValidEncryptionRequest(src, dest *rbdVolume, rbdSnap *rbdSnapshot) error {
-	// if snapshot is encrypted the request volume should also be encrypted
 	if rbdSnap != nil {
-		switch {
-		case rbdSnap.isEncrypted() && !dest.isEncrypted():
-			return status.Error(codes.InvalidArgument, "cannot create unencrypted volume from encrypted snapshot")
-
-		case !rbdSnap.isEncrypted() && dest.isEncrypted():
-			return status.Error(codes.InvalidArgument, "cannot create encrypted volume from unencrypted snapshot")
+		err = rbdSnap.IsCompatibleEncryption(&rbdVol.rbdImage)
+		if err != nil {
+			return status.Errorf(codes.InvalidArgument, "can not restore from snapshot %s: %s", rbdSnap, err.Error())
+		}
+	}  else {
+		err = parentVol.IsCompatibleEncryption(&rbdVol.rbdImage)
+		if err != nil {
+			return status.Errorf(codes.InvalidArgument, "can not clone volume %s: %s", parentVol, err.Error())
 		}
 	}
-	// if parent volume is encrypted the request volume should also be encrypted
-	if src != nil {
-		switch {
-		case src.isEncrypted() && !dest.isEncrypted():
-			return status.Error(codes.InvalidArgument, "cannot create unencrypted volume from encrypted volume")
 
-		case !src.isEncrypted() && dest.isEncrypted():
-			return status.Error(codes.InvalidArgument, "cannot create encrypted volume from unencrypted volume")
-		}
-	}
 	return nil
 }
 
