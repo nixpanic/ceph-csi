@@ -503,11 +503,22 @@ func (cs *ControllerServer) createVolumeFromSnapshot(ctx context.Context, cr *ut
 	// as we are operating on single cluster reuse the connection
 	parentVol.conn = rbdVol.conn.Copy()
 
-	// create clone image and delete snapshot
-	err = rbdVol.cloneRbdImageFromSnapshot(ctx, rbdSnap, parentVol)
-	if err != nil {
-		util.ErrorLog(ctx, "failed to clone rbd image %s from snapshot %s: %v", rbdVol, rbdSnap, err)
-		return err
+	if rbdVol.ThickProvision {
+		err = parentVol.DeepCopy(rbdVol)
+		if err != nil {
+			return status.Errorf(codes.Internal, "failed to deep copy %q into %q: %v", parentVol, rbdVol, err)
+		}
+		err = rbdVol.setThickProvisioned()
+		if err != nil {
+			return status.Errorf(codes.Internal, "failed mark %q thick-provisioned: %s", rbdVol, err)
+		}
+	} else {
+		// create clone image and delete snapshot
+		err = rbdVol.cloneRbdImageFromSnapshot(ctx, rbdSnap, parentVol)
+		if err != nil {
+			util.ErrorLog(ctx, "failed to clone rbd image %s from snapshot %s: %v", rbdVol, rbdSnap, err)
+			return err
+		}
 	}
 
 	util.DebugLog(ctx, "create volume %s from snapshot %s", rbdVol.RequestName, rbdSnap.RbdSnapName)
