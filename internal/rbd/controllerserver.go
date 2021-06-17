@@ -366,7 +366,27 @@ func (cs *ControllerServer) repairExistingVolume(ctx context.Context, req *csi.C
 
 	// rbdVol is a clone from an other volume
 	case vcs.GetVolume() != nil:
-		// TODO: is there really nothing to repair on image clone?
+		// When cloning into a thick-provisioned volume was happening,
+		// the image should be marked as thick-provisioned, unless it
+		// was aborted in flight. In order to restart the
+		// thick-cloning, delete the volume and let the caller retry
+		// from the start.
+		if isThickProvisionRequest(req.GetParameters()) {
+			thick, err := rbdVol.isThickProvisioned()
+			if err != nil {
+				return nil, status.Errorf(codes.Aborted, "failed to verify thick-provisioned volume %q: %s", rbdVol, err)
+			} else if !thick {
+				err = deleteImage(ctx, rbdVol, cr)
+				if err != nil {
+					return nil, status.Errorf(codes.Aborted, "failed to delete partially cloned volume %q: %s", rbdVol, err)
+				}
+				err = undoVolReservation(ctx, rbdVol, cr)
+				if err != nil {
+					return nil, status.Errorf(codes.Aborted, "failed to remove volume %q from journal: %s", rbdVol, err)
+				}
+				return nil, status.Errorf(codes.Aborted, "cloning thick-provisioned volume %q has been interrupted, please retry", rbdVol)
+			}
+		}
 	}
 
 	return buildCreateVolumeResponse(req, rbdVol), nil
