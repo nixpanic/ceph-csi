@@ -120,6 +120,7 @@ func TestStdVaultToCSIConfig(t *testing.T) {
 	vaultConfigMap := `{
 		"KMS_PROVIDER":"vaulttokens",
 		"VAULT_ADDR":"https://vault.example.com",
+		"VAULT_BACKEND":"kv-v2",
 		"VAULT_BACKEND_PATH":"/secret",
 		"VAULT_CACERT":"",
 		"VAULT_TLS_SERVER_NAME":"vault.example.com",
@@ -144,6 +145,8 @@ func TestStdVaultToCSIConfig(t *testing.T) {
 		t.Errorf("unexpected value for EncryptionKMSType: %s", v.EncryptionKMSType)
 	case v.VaultAddress != "https://vault.example.com":
 		t.Errorf("unexpected value for VaultAddress: %s", v.VaultAddress)
+	case v.VaultBackend != "kv-v2":
+		t.Errorf("unexpected value for VaultBackend: %s", v.VaultBackend)
 	case v.VaultBackendPath != "/secret":
 		t.Errorf("unexpected value for VaultBackendPath: %s", v.VaultBackendPath)
 	case v.VaultCAFromSecret != "":
@@ -193,6 +196,7 @@ func TestDataToMap(t *testing.T) {
 		"vaultAddress": "http://vault.default.svc.cluster.local:8200",
 		"vaultAuthPath": "/v1/auth/kubernetes/login",
 		"vaultRole": "csi-kubernetes",
+		"vaultBackend": "kv-v2",
 		"vaultPassphraseRoot": "/v1/secret",
 		"vaultPassphrasePath": "ceph-csi/",
 		"vaultCAVerify": "false"
@@ -203,6 +207,7 @@ func TestDataToMap(t *testing.T) {
 		"vaultAddress":        "http://vault.default.svc.cluster.local:8200",
 		"vaultAuthPath":       "/v1/auth/kubernetes/login",
 		"vaultRole":           "csi-kubernetes",
+		"vaultBackend":        "kv-v2",
 		"vaultPassphraseRoot": "/v1/secret",
 		"vaultPassphrasePath": "ceph-csi/",
 		"vaultCAVerify":       "false",
@@ -231,6 +236,7 @@ func TestCMToConfig(t *testing.T) {
 		"KMS_PROVIDER":"vaulttokens",
 		"KMS_SERVICE_NAME":"vault",
 		"VAULT_ADDR":"https://vault.qe.rh-ocs.com:8200",
+		"VAULT_BACKEND":"kv-v2",
 		"VAULT_BACKEND_PATH":"rbd-encryption",
 		"VAULT_CACERT":"ocs-kms-ca-secret-cp6wg",
 		"VAULT_TLS_SERVER_NAME":"",
@@ -247,6 +253,7 @@ func TestCMToConfig(t *testing.T) {
 		"vaultAddress": "http://vault.default.svc.cluster.local:8200",
 		"vaultAuthPath": "/v1/auth/kubernetes/login",
 		"vaultRole": "csi-kubernetes",
+		"vaultBackend": "kv-v2",
 		"vaultPassphraseRoot": "/v1/secret",
 		"vaultPassphrasePath": "ceph-csi/",
 		"vaultCAVerify": "false"
