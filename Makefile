@@ -160,6 +160,9 @@ cephcsi: check-env
 e2e.test: check-env
 	go test $(GO_TAGS) -mod=vendor -c ./e2e
 
+deploy/scc.yaml: api/deploy/ocp/scc.go
+	$(MAKE) -C tools generate-deploy
+
 #
 # e2e testing by compiling e2e.test in case it does not exist and running the
 # executable. The e2e.test executable is not checked as a dependency in the
