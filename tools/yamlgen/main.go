@@ -35,8 +35,7 @@ const header = `---
 `
 
 func main() {
-	scc := ocp.NewSecurityContextConstraints("ceph-csi", "")
-
+	scc := ocp.NewSecurityContextConstraints2(ocp.SecurityContextConstraintsDefaults)
 	out, err := yaml.Marshal(scc)
 	if err != nil {
 		fmt.Printf("an error occurred: %s\n", err)
