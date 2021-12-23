@@ -160,6 +160,10 @@ cephcsi: check-env
 e2e.test: check-env
 	go test $(GO_TAGS) -mod=vendor -c ./e2e
 
+_output/csi-addons: tools/csi-addons/*.go
+	if [ ! -d ./vendor ]; then (go mod tidy && go mod vendor); fi
+	GOOS=linux go build $(GO_TAGS) -mod vendor -a -ldflags '$(LDFLAGS)' -o _output/csi-addons ./tools/csi-addons
+
 #
 # Update the generated deploy/ files when the template changed. This requires
 # running 'go mod vendor' so update the API files under the vendor/ directory.
@@ -244,6 +248,7 @@ clean:
 	go clean -mod=vendor -r -x
 	rm -f deploy/cephcsi/image/cephcsi
 	rm -f _output/cephcsi
+	$(RM) _output/csi-addons
 	$(RM) scripts/golangci.yml
 	$(RM) e2e.test
 	[ ! -f .devel-container-id ] || $(CONTAINER_CMD) rmi $(CSI_IMAGE_NAME):devel
