@@ -1,0 +1,178 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: csi-nfsplugin-provisioner
+  namespace: openshift-storage
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: csi-nfsplugin-provisioner
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: csi-nfsplugin-provisioner
+        contains: csi-nfsplugin-metrics
+    spec:
+      affinity:
+        nodeAffinity: {}
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - csi-nfsplugin-provisioner
+            topologyKey: kubernetes.io/hostname
+      containers:
+      - args:
+        - --csi-address=$(ADDRESS)
+        - --v=5
+        - --timeout=150s
+        - --retry-interval-start=500ms
+        - --leader-election=true
+        - --leader-election-namespace=openshift-storage
+        env:
+        - name: ADDRESS
+          value: unix:///csi/csi-provisioner.sock
+        image: registry.redhat.io/openshift4/ose-csi-external-provisioner@sha256:bb0296d1171ef019f1f224127de3c53ee885cd6dcc172b0fe08d4de2aa6fd36d
+        imagePullPolicy: IfNotPresent
+        name: csi-provisioner
+        resources: {}
+        securityContext:
+          allowPrivilegeEscalation: true
+          capabilities:
+            add:
+            - SYS_ADMIN
+          privileged: true
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /csi
+          name: socket-dir
+      - args:
+        - --nodeid=$(NODE_ID)
+        - --type=nfs
+        - --endpoint=$(CSI_ENDPOINT)
+        - --v=5
+        - --controllerserver=true
+        - --drivername=openshift-storage.nfs.csi.ceph.com
+        - --metricspath=/metrics
+        - --enablegrpcmetrics=false
+        env:
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: status.podIP
+        - name: NODE_ID
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        - name: CSI_ENDPOINT
+          value: unix:///csi/csi-provisioner.sock
+        image: quay.io/nixpanic/cephcsi:nfs
+        imagePullPolicy: Always
+        name: csi-nfsplugin
+        resources: {}
+        securityContext:
+          allowPrivilegeEscalation: true
+          capabilities:
+            add:
+            - SYS_ADMIN
+          privileged: true
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /csi
+          name: socket-dir
+        - mountPath: /sys
+          name: host-sys
+        - mountPath: /lib/modules
+          name: lib-modules
+          readOnly: true
+        - mountPath: /dev
+          name: host-dev
+        - mountPath: /etc/ceph-csi-config/
+          name: ceph-csi-config
+        - mountPath: /tmp/csi/keys
+          name: keys-tmp-dir
+      - args:
+        - --type=liveness
+        - --endpoint=$(CSI_ENDPOINT)
+        - --metricsport=9081
+        - --metricspath=/metrics
+        - --polltime=60s
+        - --timeout=3s
+        env:
+        - name: CSI_ENDPOINT
+          value: unix:///csi/csi-provisioner.sock
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: status.podIP
+        image: quay.io/nixpanic/cephcsi:nfs
+        imagePullPolicy: IfNotPresent
+        name: liveness-prometheus
+        resources: {}
+        securityContext:
+          allowPrivilegeEscalation: true
+          capabilities:
+            add:
+            - SYS_ADMIN
+          privileged: true
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /csi
+          name: socket-dir
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      serviceAccount: rook-csi-cephfs-provisioner-sa
+      serviceAccountName: rook-csi-cephfs-provisioner-sa
+      terminationGracePeriodSeconds: 30
+      tolerations:
+      - effect: NoSchedule
+        key: node.ocs.openshift.io/storage
+        operator: Equal
+        value: "true"
+      volumes:
+      - emptyDir:
+          medium: Memory
+        name: socket-dir
+      - hostPath:
+          path: /sys
+          type: ""
+        name: host-sys
+      - hostPath:
+          path: /lib/modules
+          type: ""
+        name: lib-modules
+      - hostPath:
+          path: /dev
+          type: ""
+        name: host-dev
+      - configMap:
+          defaultMode: 420
+          items:
+          - key: csi-cluster-config-json
+            path: config.json
+          name: rook-ceph-csi-config
+        name: ceph-csi-config
+      - emptyDir:
+          medium: Memory
+        name: keys-tmp-dir

@@ -1,0 +1,21 @@
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-nfs
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  mountOptions:
+    - hard
+    - nfsvers=4.1
+  csi:
+    driver: openshift-storage.nfs.csi.ceph.com
+    readOnly: false
+    volumeHandle: 0001-0011-openshift-storage-0000000000000001-f2d6b5c7-8f2e-11ec-a01e-0a580a830016
+    volumeAttributes:
+      server: rook-ceph-nfs-my-nfs-a.openshift-storage.cluster.svc
+      share: /csi-vol-f2d6b5c7-8f2e-11ec-a01e-0a580a830016
