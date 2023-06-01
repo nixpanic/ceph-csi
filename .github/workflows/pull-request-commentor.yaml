@@ -10,7 +10,15 @@ on:
       - labeled
       - opened
 jobs:
+  date:
+    # by having this job before add-comment, `add-comment` can be debugged
+    runs-on: ubuntu-latest
+    steps:
+      - name: Log the current date
+        run: date
+
   add-comment:
+    needs: date
     if: >
       (github.event.pull_request.label == 'ok-to-test' &&
       github.event.pull_request.merged != true) ||
