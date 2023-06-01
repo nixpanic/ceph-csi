@@ -19,10 +19,18 @@ jobs:
       - name: date
         run: date
 
-      - name: Add comment to trigger external storage tests for Kubernetes 1.24
-        if: (github.event.pull_request.label == 'ok-to-test' && github.event.pull_request.merged != true) || (github.event.pull_request.action == 'opened' && contains(github.event.pull_request.labels.*.name,'ok-to-test'))
+      - name: Add comment to trigger external storage tests for Kubernetes 1.24 - 1
+        if: (github.event.pull_request.label == 'ok-to-test' && github.event.pull_request.merged != true)
         uses: peter-evans/create-or-update-comment@v3
         with:
           issue-number: ${{ github.event.pull_request.number }}
           body: |
-            /test ci/centos/k8s-e2e-external-storage/1.24
+            /test ci/centos/k8s-e2e-external-storage/1.24/1
+
+      - name: Add comment to trigger external storage tests for Kubernetes 1.24 - 2
+        if: (github.event.pull_request.action == 'opened' && contains(github.event.pull_request.labels.*.name,'ok-to-test'))
+        uses: peter-evans/create-or-update-comment@v3
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body: |
+            /test ci/centos/k8s-e2e-external-storage/1.24/2
