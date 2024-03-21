@@ -336,7 +336,7 @@ func (cs *ControllerServer) CreateVolume(
 	if err != nil {
 		return nil, err
 	}
-	defer rbdVol.Destroy()
+	defer rbdVol.Destroy(ctx)
 	// Existence and conflict checks
 	if acquired := cs.VolumeLocks.TryAcquire(req.GetName()); !acquired {
 		log.ErrorLog(ctx, util.VolumeOperationAlreadyExistsFmt, req.GetName())
@@ -350,10 +350,10 @@ func (cs *ControllerServer) CreateVolume(
 		return nil, err
 	}
 	if parentVol != nil {
-		defer parentVol.Destroy()
+		defer parentVol.Destroy(ctx)
 	}
 	if rbdSnap != nil {
-		defer rbdSnap.Destroy()
+		defer rbdSnap.Destroy(ctx)
 	}
 
 	err = updateTopologyConstraints(rbdVol, rbdSnap)
@@ -466,7 +466,7 @@ func flattenParentImage(
 		// in case of any error call Destroy for cleanup.
 		defer func() {
 			if err != nil {
-				rbdSnap.Destroy()
+				rbdSnap.Destroy(ctx)
 			}
 		}()
 
@@ -662,7 +662,7 @@ func (cs *ControllerServer) createVolumeFromSnapshot(
 
 		return status.Error(codes.Internal, err.Error())
 	}
-	defer rbdSnap.Destroy()
+	defer rbdSnap.Destroy(ctx)
 
 	// update parent name(rbd image name in snapshot)
 	rbdSnap.RbdImageName = rbdSnap.RbdSnapName
@@ -944,7 +944,7 @@ func (cs *ControllerServer) DeleteVolume(
 	rbdVol, err := GenVolFromVolID(ctx, volumeID, cr, req.GetSecrets())
 	defer func() {
 		if rbdVol != nil {
-			rbdVol.Destroy()
+			rbdVol.Destroy(ctx)
 		}
 	}()
 	if err != nil {
@@ -1104,7 +1104,7 @@ func (cs *ControllerServer) CreateSnapshot(
 	rbdVol, err := GenVolFromVolID(ctx, req.GetSourceVolumeId(), cr, req.GetSecrets())
 	defer func() {
 		if rbdVol != nil {
-			rbdVol.Destroy()
+			rbdVol.Destroy(ctx)
 		}
 	}()
 	if err != nil {
@@ -1247,7 +1247,7 @@ func cloneFromSnapshot(
 
 		return nil, status.Errorf(codes.Internal, err.Error())
 	}
-	defer vol.Destroy()
+	defer vol.Destroy(ctx)
 
 	err = rbdVol.copyEncryptionConfig(ctx, &vol.rbdImage, false)
 	if err != nil {
@@ -1323,7 +1323,7 @@ func (cs *ControllerServer) doSnapshotClone(
 ) (*rbdVolume, error) {
 	// generate cloned volume details from snapshot
 	cloneRbd := generateVolFromSnap(rbdSnap)
-	defer cloneRbd.Destroy()
+	defer cloneRbd.Destroy(ctx)
 	// add image feature for cloneRbd
 	f := []string{librbd.FeatureNameLayering, librbd.FeatureNameDeepFlatten}
 	cloneRbd.ImageFeatureSet = librbd.FeatureSetFromNames(f)
@@ -1466,7 +1466,7 @@ func (cs *ControllerServer) DeleteSnapshot(
 
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	defer rbdSnap.Destroy()
+	defer rbdSnap.Destroy(ctx)
 
 	// safeguard against parallel create or delete requests against the same
 	// name
@@ -1486,7 +1486,7 @@ func (cs *ControllerServer) DeleteSnapshot(
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	defer rbdVol.Destroy()
+	defer rbdVol.Destroy(ctx)
 
 	rbdVol.ImageID = rbdSnap.ImageID
 	// update parent name to delete the snapshot
@@ -1516,7 +1516,7 @@ func cleanUpImageAndSnapReservation(ctx context.Context, rbdSnap *rbdSnapshot, c
 	if err != nil {
 		return status.Error(codes.Internal, err.Error())
 	}
-	defer rbdVol.Destroy()
+	defer rbdVol.Destroy(ctx)
 
 	err = rbdVol.openIoctx()
 	if err != nil {
@@ -1590,7 +1590,7 @@ func (cs *ControllerServer) ControllerExpandVolume(
 
 		return nil, err
 	}
-	defer rbdVol.Destroy()
+	defer rbdVol.Destroy(ctx)
 
 	// NodeExpansion is needed for PersistentVolumes with,
 	// 1. Filesystem VolumeMode with & without Encryption and

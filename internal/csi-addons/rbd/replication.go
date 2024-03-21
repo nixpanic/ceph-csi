@@ -245,7 +245,7 @@ func (rs *ReplicationServer) EnableVolumeReplication(ctx context.Context,
 	rbdVol, err := corerbd.GenVolFromVolID(ctx, volumeID, cr, req.GetSecrets())
 	defer func() {
 		if rbdVol != nil {
-			rbdVol.Destroy()
+			rbdVol.Destroy(ctx)
 		}
 	}()
 	if err != nil {
@@ -311,7 +311,7 @@ func (rs *ReplicationServer) DisableVolumeReplication(ctx context.Context,
 	rbdVol, err := corerbd.GenVolFromVolID(ctx, volumeID, cr, req.GetSecrets())
 	defer func() {
 		if rbdVol != nil {
-			rbdVol.Destroy()
+			rbdVol.Destroy(ctx)
 		}
 	}()
 	if err != nil {
@@ -386,7 +386,7 @@ func (rs *ReplicationServer) PromoteVolume(ctx context.Context,
 	rbdVol, err := corerbd.GenVolFromVolID(ctx, volumeID, cr, req.GetSecrets())
 	defer func() {
 		if rbdVol != nil {
-			rbdVol.Destroy()
+			rbdVol.Destroy(ctx)
 		}
 	}()
 	if err != nil {
@@ -486,7 +486,7 @@ func (rs *ReplicationServer) DemoteVolume(ctx context.Context,
 	rbdVol, err := corerbd.GenVolFromVolID(ctx, volumeID, cr, req.GetSecrets())
 	defer func() {
 		if rbdVol != nil {
-			rbdVol.Destroy()
+			rbdVol.Destroy(ctx)
 		}
 	}()
 	if err != nil {
@@ -603,7 +603,7 @@ func (rs *ReplicationServer) ResyncVolume(ctx context.Context,
 	rbdVol, err := corerbd.GenVolFromVolID(ctx, volumeID, cr, req.GetSecrets())
 	defer func() {
 		if rbdVol != nil {
-			rbdVol.Destroy()
+			rbdVol.Destroy(ctx)
 		}
 	}()
 	if err != nil {
@@ -820,7 +820,7 @@ func (rs *ReplicationServer) GetVolumeReplicationInfo(ctx context.Context,
 	rbdVol, err := corerbd.GenVolFromVolID(ctx, volumeID, cr, req.GetSecrets())
 	defer func() {
 		if rbdVol != nil {
-			rbdVol.Destroy()
+			rbdVol.Destroy(ctx)
 		}
 	}()
 	if err != nil {
