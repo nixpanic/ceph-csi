@@ -18,8 +18,8 @@ package rbd
 
 import (
 	"context"
-	"errors"
 
+	group "github.com/ceph/ceph-csi/internal/rbd_group"
 	"github.com/ceph/ceph-csi/internal/rbd/types"
 	"github.com/ceph/ceph-csi/internal/util"
 )
@@ -77,13 +77,14 @@ func (mgr *rbdManager) GetVolumeByID(ctx context.Context, id string) (types.Volu
 }
 
 func (mgr *rbdManager) GetVolumeGroupByID(ctx context.Context, id string) (types.VolumeGroup, error) {
-	return nil, errors.New("rbdManager.GetVolumeGroupByID() is not implemented yet")
+	return group.GetVolumeGroup(ctx, id, mgr.secrets)
 }
 
 func (mgr *rbdManager) CreateVolumeGroup(ctx context.Context, name string) (types.VolumeGroup, error) {
-	return nil, errors.New("rbdManager.CreateVolumeGroup() is not implemented yet")
+	return nil, nil
 }
 
 func (mgr *rbdManager) DeleteVolumeGroup(ctx context.Context, vg types.VolumeGroup) error {
-	return errors.New("rbdManager.CreateVolumeGroup() is not implemented yet")
+	// TODO: remove from journal
+	return vg.Delete(ctx)
 }
