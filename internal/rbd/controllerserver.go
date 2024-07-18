@@ -239,7 +239,7 @@ func (cs *ControllerServer) parseVolCreateRequest(
 	return rbdVol, nil
 }
 
-func (rbdVol *rbdVolume) ToCSI(ctx context.Context) *csi.Volume {
+func (rbdVol *rbdVolume) ToCSI(ctx context.Context) (*csi.Volume, error) {
 	vol := &csi.Volume{
 		VolumeId:      rbdVol.VolID,
 		CapacityBytes: rbdVol.VolSize,
@@ -266,7 +266,7 @@ func (rbdVol *rbdVolume) ToCSI(ctx context.Context) *csi.Volume {
 		}
 	}
 
-	return vol
+	return vol, nil
 }
 
 func buildCreateVolumeResponse(
@@ -274,7 +274,11 @@ func buildCreateVolumeResponse(
 	req *csi.CreateVolumeRequest,
 	rbdVol *rbdVolume,
 ) *csi.CreateVolumeResponse {
-	volume := rbdVol.ToCSI(ctx)
+	volume, err := rbdVol.ToCSI(ctx)
+	if err != nil {
+		log.ErrorLog(ctx, "BUG, can not happen: failed to convert volume %q to CSI type: %w", rbdVol, err)
+	}
+
 	volume.ContentSource = req.GetVolumeContentSource()
 
 	for param, value := range util.GetVolumeContext(req.GetParameters()) {
