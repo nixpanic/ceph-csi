@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/ceph/ceph-csi/internal/util"
 	"github.com/ceph/ceph-csi/internal/util/k8s"
 	"github.com/ceph/ceph-csi/internal/util/log"
 
@@ -66,7 +67,7 @@ func (rv *rbdVolume) checkCloneImage(ctx context.Context, parentVol *rbdVolume) 
 
 			return true, nil
 
-		case errors.Is(err, ErrImageNotFound):
+		case errors.Is(err, util.ErrImageNotFound):
 			// as the temp clone does not exist,check snapshot exists on parent volume
 			// snapshot name is same as temporary clone image
 			snap.RbdImageName = tempClone.RbdImageName
@@ -171,6 +172,14 @@ func (rv *rbdVolume) createCloneFromImage(ctx context.Context, parentVol *rbdVol
 	err = rv.expand()
 	if err != nil {
 		log.ErrorLog(ctx, "failed to resize volume %s: %v", rv, err)
+
+		return err
+	}
+
+	// adjust rbd qos after resize volume.
+	err = rv.AdjustQOS(ctx)
+	if err != nil {
+		log.ErrorLog(ctx, "failed adjust QOS for rbd image")
 
 		return err
 	}

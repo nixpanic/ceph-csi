@@ -148,6 +148,12 @@ type rbdImage struct {
 	EnableMetadata bool
 	// ParentInTrash indicates the parent image is in trash.
 	ParentInTrash bool
+
+	// RBD QoS configuration
+	QosParameters map[string]string
+
+	// the min size of volume what use to calc qos beased on capacity.
+	BaseVolSize string
 }
 
 // check that rbdVolume implements the types.Volume interface.
@@ -524,7 +530,7 @@ func (ri *rbdImage) open() (*librbd.Image, error) {
 	image, err := librbd.OpenImage(ri.ioctx, ri.RbdImageName, librbd.NoSnapshot)
 	if err != nil {
 		if errors.Is(err, librbd.ErrNotFound) {
-			err = fmt.Errorf("Failed as %w (internal %w)", ErrImageNotFound, err)
+			err = fmt.Errorf("Failed as %w (internal %w)", util.ErrImageNotFound, err)
 		}
 
 		return nil, err
@@ -542,7 +548,7 @@ func (ri *rbdImage) open() (*librbd.Image, error) {
 func (ri *rbdImage) isInUse() (bool, error) {
 	image, err := ri.open()
 	if err != nil {
-		if errors.Is(err, ErrImageNotFound) || errors.Is(err, util.ErrPoolNotFound) {
+		if errors.Is(err, util.ErrImageNotFound) || errors.Is(err, util.ErrPoolNotFound) {
 			return false, err
 		}
 		// any error should assume something else is using the image
@@ -681,7 +687,7 @@ func (ri *rbdImage) Delete(ctx context.Context) error {
 	err = rbdImage.Trash(0)
 	if err != nil {
 		if errors.Is(err, librbd.ErrNotFound) {
-			return fmt.Errorf("Failed as %w (internal %w)", ErrImageNotFound, err)
+			return fmt.Errorf("Failed as %w (internal %w)", util.ErrImageNotFound, err)
 		}
 
 		log.ErrorLog(ctx, "failed to delete rbd image: %s, error: %v", ri, err)
@@ -731,7 +737,7 @@ func (rv *rbdVolume) DeleteTempImage(ctx context.Context) error {
 	tempClone := rv.generateTempClone()
 	err := tempClone.Delete(ctx)
 	if err != nil {
-		if errors.Is(err, ErrImageNotFound) {
+		if errors.Is(err, util.ErrImageNotFound) {
 			return tempClone.ensureImageCleanup(ctx)
 		} else {
 			// return error if it is not ErrImageNotFound
@@ -770,7 +776,7 @@ func (ri *rbdImage) getCloneDepth(ctx context.Context) (uint, error) {
 			// if the parent image is moved to trash the name will be present
 			// in rbd image info but the image will be in trash, in that case
 			// return the found depth
-			if errors.Is(err, ErrImageNotFound) {
+			if errors.Is(err, util.ErrImageNotFound) {
 				return depth, nil
 			}
 			log.ErrorLog(ctx, "failed to check depth on image %s: %s", &vol, err)
@@ -956,7 +962,7 @@ func (ri *rbdImage) checkImageChainHasFeature(ctx context.Context, feature uint6
 			// is in the trash, when we try to open the parent image to get its
 			// information it fails because it is already in trash. We should
 			// treat error as nil if the parent is not found.
-			if errors.Is(err, ErrImageNotFound) {
+			if errors.Is(err, util.ErrImageNotFound) {
 				return false, nil
 			}
 			log.ErrorLog(ctx, "failed to get image info for %s: %s", rbdImg.String(), err)
@@ -1214,7 +1220,7 @@ func GenVolFromVolID(
 	}
 
 	vol, err = generateVolumeFromVolumeID(ctx, volumeID, vi, cr, secrets)
-	if !shouldRetryVolumeGeneration(err) {
+	if !util.ShouldRetryVolumeGeneration(err) {
 		return vol, err
 	}
 
@@ -1225,7 +1231,7 @@ func GenVolFromVolID(
 	}
 	if mapping != nil {
 		rbdVol, vErr := generateVolumeFromMapping(ctx, mapping, volumeID, vi, cr, secrets)
-		if !shouldRetryVolumeGeneration(vErr) {
+		if !util.ShouldRetryVolumeGeneration(vErr) {
 			return rbdVol, vErr
 		}
 	}
@@ -1278,7 +1284,7 @@ func generateVolumeFromMapping(
 					// Add mapping poolID to Identifier
 					nvi.LocationID = pID
 					vol, err = generateVolumeFromVolumeID(ctx, volumeID, nvi, cr, secrets)
-					if !shouldRetryVolumeGeneration(err) {
+					if !util.ShouldRetryVolumeGeneration(err) {
 						return vol, err
 					}
 				}
@@ -1287,33 +1293,6 @@ func generateVolumeFromMapping(
 	}
 
 	return vol, util.ErrPoolNotFound
-}
-
-// shouldRetryVolumeGeneration determines whether the process of finding or generating
-// volumes should continue based on the type of error encountered.
-//
-// It checks if the given error matches any of the following known errors:
-//   - util.ErrKeyNotFound: The key required to locate the volume is missing in Rados omap.
-//   - util.ErrPoolNotFound: The rbd pool where the volume/omap is expected doesn't exist.
-//   - ErrImageNotFound: The image doesn't exist in the rbd pool.
-//   - rados.ErrPermissionDenied: Permissions to access the pool is denied.
-//
-// If any of these errors are encountered, the function returns `true`, indicating
-// that the volume search should continue because of known error. Otherwise, it
-// returns `false`, meaning the search should stop.
-//
-// This helper function is used in scenarios where multiple attempts may be made
-// to retrieve or generate volume information, and we want to gracefully handle
-// specific failure cases while retrying for others.
-func shouldRetryVolumeGeneration(err error) bool {
-	if err == nil {
-		return false // No error, do not retry
-	}
-	// Continue searching for specific known errors
-	return (errors.Is(err, util.ErrKeyNotFound) ||
-		errors.Is(err, util.ErrPoolNotFound) ||
-		errors.Is(err, ErrImageNotFound) ||
-		errors.Is(err, rados.ErrPermissionDenied))
 }
 
 func genVolFromVolumeOptions(
