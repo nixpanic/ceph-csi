@@ -250,6 +250,17 @@ func (cs *ControllerServer) parseVolCreateRequest(
 }
 
 func (rbdVol *rbdVolume) ToCSI(ctx context.Context) (*csi.Volume, error) {
+	switch {
+	case rbdVol.VolID == "":
+		return nil, fmt.Errorf("%q does not have a volume-id set", rbdVol)
+	case rbdVol.Pool == "":
+		return nil, fmt.Errorf("%q does not have a pool set", rbdVol)
+	case rbdVol.JournalPool == "":
+		return nil, fmt.Errorf("%q does not have a journal-pool set", rbdVol)
+	case rbdVol.RbdImageName == "":
+		return nil, fmt.Errorf("%q does not have an image-name set", rbdVol)
+	}
+
 	vol := &csi.Volume{
 		VolumeId:      rbdVol.VolID,
 		CapacityBytes: rbdVol.VolSize,
@@ -1248,7 +1259,11 @@ func (cs *ControllerServer) CreateSnapshot(
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	csiSnap, err := vol.toSnapshot().ToCSI(ctx)
+	// FIXME: doSnapshotClone() returns a rbdVolume, some attributes may be missing?
+	snap := vol.toSnapshot()
+	snap.SourceVolumeID = rbdSnap.SourceVolumeID
+
+	csiSnap, err := snap.ToCSI(ctx)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
