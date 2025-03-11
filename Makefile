@@ -110,8 +110,6 @@ go-test-api: check-env
 mod-check: check-env
 	@echo 'running: go mod verify'
 	@go mod verify && [ "$(shell sha512sum go.mod)" = "`sha512sum go.mod`" ] || ( echo "ERROR: go.mod was modified by 'go mod verify'" && false )
-	@echo 'running: go list -mod=readonly -m all'
-	@go list -mod=readonly -m all 1> /dev/null
 
 scripts/golangci.yml: scripts/golangci.yml.in
 	rm -f scripts/golangci.yml.buildtags.in
@@ -170,7 +168,7 @@ cephcsi: check-env
 	GOOS=linux go build $(GO_TAGS) -mod vendor -a -ldflags '$(LDFLAGS)' -o _output/cephcsi ./cmd/
 
 e2e.test: check-env
-	go test $(GO_TAGS) -mod=vendor -c ./e2e
+	cd e2e && go test $(GO_TAGS) -mod=vendor -c -o ../e2e.test ./
 
 .PHONY: rbd-group-snapshot
 rbd-group-snapshot:
