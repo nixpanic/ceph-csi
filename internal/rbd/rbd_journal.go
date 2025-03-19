@@ -21,6 +21,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/ceph/ceph-csi/pkg/util/crypto"
+
 	"github.com/ceph/ceph-csi/internal/journal"
 	"github.com/ceph/ceph-csi/internal/util"
 	"github.com/ceph/ceph-csi/internal/util/k8s"
@@ -91,14 +93,14 @@ func validateRbdVol(rbdVol *rbdVolume) error {
 	return err
 }
 
-func getEncryptionConfig(rbdVol *rbdVolume) (string, util.EncryptionType) {
+func getEncryptionConfig(rbdVol *rbdVolume) (string, crypto.EncryptionType) {
 	switch {
 	case rbdVol.isBlockEncrypted():
-		return rbdVol.blockEncryption.GetID(), util.EncryptionTypeBlock
+		return rbdVol.blockEncryption.GetID(), crypto.EncryptionTypeBlock
 	case rbdVol.isFileEncrypted():
-		return rbdVol.fileEncryption.GetID(), util.EncryptionTypeFile
+		return rbdVol.fileEncryption.GetID(), crypto.EncryptionTypeFile
 	default:
-		return "", util.EncryptionTypeNone
+		return "", crypto.EncryptionTypeNone
 	}
 }
 
@@ -145,7 +147,7 @@ func checkSnapCloneExists(
 	defer j.Destroy()
 
 	snapData, err := j.CheckReservation(ctx, rbdSnap.JournalPool,
-		rbdSnap.RequestName, rbdSnap.NamePrefix, rbdSnap.RbdImageName, "", util.EncryptionTypeNone)
+		rbdSnap.RequestName, rbdSnap.NamePrefix, rbdSnap.RbdImageName, "", crypto.EncryptionTypeNone)
 	if err != nil {
 		return false, err
 	}
@@ -172,7 +174,7 @@ func checkSnapCloneExists(
 	// Fetch on-disk image attributes
 	err = vol.getImageInfo()
 	if err != nil {
-		if errors.Is(err, ErrImageNotFound) {
+		if errors.Is(err, util.ErrImageNotFound) {
 			err = parentVol.deleteSnapshot(ctx, rbdSnap)
 			if err != nil {
 				if !errors.Is(err, ErrSnapNotFound) {
@@ -297,24 +299,28 @@ func (rv *rbdVolume) Exists(ctx context.Context, parentVol *rbdVolume) (bool, er
 	requestSize := rv.VolSize
 	// Fetch on-disk image attributes and compare against request
 	err = rv.getImageInfo()
-	if err != nil {
-		if errors.Is(err, ErrImageNotFound) {
-			// Need to check cloned info here not on createvolume,
-			if parentVol != nil {
-				found, cErr := rv.checkCloneImage(ctx, parentVol)
-				switch {
-				case found && cErr == nil:
-					return true, nil
-				case cErr != nil:
-					return false, cErr
-				}
-			}
-			err = j.UndoReservation(ctx, rv.JournalPool, rv.Pool,
-				rv.RbdImageName, rv.RequestName)
+	switch {
+	case errors.Is(err, util.ErrImageNotFound) && parentVol != nil:
+		// Need to check cloned info here not on createvolume
+		found, cErr := rv.checkCloneImage(ctx, parentVol)
+		if cErr != nil {
+			return false, cErr
+		}
+
+		if !found {
+			// image not found, undo the reservation
+			err = j.UndoReservation(ctx, rv.JournalPool, rv.Pool, rv.RbdImageName, rv.RequestName)
 
 			return false, err
 		}
 
+	case errors.Is(err, util.ErrImageNotFound) && parentVol == nil:
+		// image not found, undo the reservation
+		err = j.UndoReservation(ctx, rv.JournalPool, rv.Pool, rv.RbdImageName, rv.RequestName)
+
+		return false, err
+
+	case err != nil:
 		return false, err
 	}
 
@@ -581,7 +587,7 @@ func RegenerateJournal(
 		vi             util.CSIIdentifier
 		rbdVol         *rbdVolume
 		kmsID          string
-		encryptionType util.EncryptionType
+		encryptionType crypto.EncryptionType
 		err            error
 		ok             bool
 	)

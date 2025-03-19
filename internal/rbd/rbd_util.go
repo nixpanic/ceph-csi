@@ -28,6 +28,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ceph/ceph-csi/pkg/util/crypto"
+	"github.com/ceph/ceph-csi/pkg/util/kernel"
+
 	"github.com/ceph/ceph-csi/internal/rbd/types"
 	"github.com/ceph/ceph-csi/internal/util"
 	"github.com/ceph/ceph-csi/internal/util/log"
@@ -81,6 +84,10 @@ const (
 
 	// clusterNameKey cluster Key, set on RBD image.
 	clusterNameKey = "csi.ceph.com/cluster/name"
+
+	// Suffix added to the temp cloned image name.
+	// This will always be (rbd image name + "-temp").
+	tempImageSuffix = "-temp"
 )
 
 // rbdImage contains common attributes and methods for the rbdVolume and
@@ -148,6 +155,12 @@ type rbdImage struct {
 	EnableMetadata bool
 	// ParentInTrash indicates the parent image is in trash.
 	ParentInTrash bool
+
+	// RBD QoS configuration
+	QosParameters map[string]string
+
+	// the min size of volume what use to calc qos beased on capacity.
+	BaseVolSize string
 }
 
 // check that rbdVolume implements the types.Volume interface.
@@ -237,28 +250,28 @@ var (
 		},
 	}
 
-	krbdLayeringSupport = []util.KernelVersion{
+	krbdLayeringSupport = []kernel.KernelVersion{
 		{
 			Version:    3,
 			PatchLevel: 8,
 			SubLevel:   0,
 		},
 	}
-	krbdStripingV2Support = []util.KernelVersion{
+	krbdStripingV2Support = []kernel.KernelVersion{
 		{
 			Version:    3,
 			PatchLevel: 10,
 			SubLevel:   0,
 		},
 	}
-	krbdExclusiveLockSupport = []util.KernelVersion{
+	krbdExclusiveLockSupport = []kernel.KernelVersion{
 		{
 			Version:    4,
 			PatchLevel: 9,
 			SubLevel:   0,
 		},
 	}
-	krbdDataPoolSupport = []util.KernelVersion{
+	krbdDataPoolSupport = []kernel.KernelVersion{
 		{
 			Version:    4,
 			PatchLevel: 11,
@@ -271,19 +284,19 @@ var (
 // Minimum kernel version should be 3.8, else it will return error.
 func prepareKrbdFeatureAttrs() (uint64, error) {
 	// fetch the current running kernel info
-	release, err := util.GetKernelVersion()
+	release, err := kernel.GetKernelVersion()
 	if err != nil {
 		return 0, fmt.Errorf("fetching current kernel version failed: %w", err)
 	}
 
 	switch {
-	case util.CheckKernelSupport(release, krbdDataPoolSupport):
+	case kernel.CheckKernelSupport(release, krbdDataPoolSupport):
 		return librbd.FeatureDataPool, nil
-	case util.CheckKernelSupport(release, krbdExclusiveLockSupport):
+	case kernel.CheckKernelSupport(release, krbdExclusiveLockSupport):
 		return librbd.FeatureExclusiveLock, nil
-	case util.CheckKernelSupport(release, krbdStripingV2Support):
+	case kernel.CheckKernelSupport(release, krbdStripingV2Support):
 		return librbd.FeatureStripingV2, nil
-	case util.CheckKernelSupport(release, krbdLayeringSupport):
+	case kernel.CheckKernelSupport(release, krbdLayeringSupport):
 		return librbd.FeatureLayering, nil
 	}
 	log.ErrorLogMsg("kernel version is too old: %q", release)
@@ -524,7 +537,7 @@ func (ri *rbdImage) open() (*librbd.Image, error) {
 	image, err := librbd.OpenImage(ri.ioctx, ri.RbdImageName, librbd.NoSnapshot)
 	if err != nil {
 		if errors.Is(err, librbd.ErrNotFound) {
-			err = fmt.Errorf("Failed as %w (internal %w)", ErrImageNotFound, err)
+			err = fmt.Errorf("Failed as %w (internal %w)", util.ErrImageNotFound, err)
 		}
 
 		return nil, err
@@ -542,7 +555,7 @@ func (ri *rbdImage) open() (*librbd.Image, error) {
 func (ri *rbdImage) isInUse() (bool, error) {
 	image, err := ri.open()
 	if err != nil {
-		if errors.Is(err, ErrImageNotFound) || errors.Is(err, util.ErrPoolNotFound) {
+		if errors.Is(err, util.ErrImageNotFound) || errors.Is(err, util.ErrPoolNotFound) {
 			return false, err
 		}
 		// any error should assume something else is using the image
@@ -600,25 +613,29 @@ func isNotMountPoint(mounter mount.Interface, stagingTargetPath string) (bool, e
 
 // isCephMgrSupported determines if the cluster has support for MGR based operation
 // depending on the error.
-func isCephMgrSupported(ctx context.Context, clusterID string, err error) bool {
+func isCephMgrSupported(ctx context.Context, clusterID string, err error) (bool, error) {
 	switch {
 	case err == nil:
-		return true
+		return true, nil
 	case strings.Contains(err.Error(), rbdTaskRemoveCmdInvalidString):
+		msg := fmt.Sprintf("cluster with cluster ID (%s) does not support Ceph manager based rbd commands"+
+			"(minimum ceph version required is v14.2.3)",
+			clusterID)
 		log.WarningLog(
 			ctx,
-			"cluster with cluster ID (%s) does not support Ceph manager based rbd commands"+
-				"(minimum ceph version required is v14.2.3)",
-			clusterID)
+			msg)
 
-		return false
+		return false, errors.New(msg)
 	case strings.Contains(err.Error(), rbdTaskRemoveCmdAccessDeniedMessage):
-		log.WarningLog(ctx, "access denied to Ceph MGR-based rbd commands on cluster ID (%s)", clusterID)
+		msg := fmt.Sprintf("access denied to Ceph MGR-based rbd commands on cluster ID (%s)",
+			clusterID)
+		log.WarningLog(ctx,
+			msg)
 
-		return false
+		return false, errors.New(msg)
 	}
 
-	return true
+	return true, nil
 }
 
 // ensureImageCleanup finds image in trash and if found removes it
@@ -681,7 +698,7 @@ func (ri *rbdImage) Delete(ctx context.Context) error {
 	err = rbdImage.Trash(0)
 	if err != nil {
 		if errors.Is(err, librbd.ErrNotFound) {
-			return fmt.Errorf("Failed as %w (internal %w)", ErrImageNotFound, err)
+			return fmt.Errorf("Failed as %w (internal %w)", util.ErrImageNotFound, err)
 		}
 
 		log.ErrorLog(ctx, "failed to delete rbd image: %s, error: %v", ri, err)
@@ -705,19 +722,23 @@ func (ri *rbdImage) trashRemoveImage(ctx context.Context) error {
 
 	_, err = ta.AddTrashRemove(admin.NewImageSpec(ri.Pool, ri.RadosNamespace, ri.ImageID))
 
-	rbdCephMgrSupported := isCephMgrSupported(ctx, ri.ClusterID, err)
+	rbdCephMgrSupported, knownErr := isCephMgrSupported(ctx, ri.ClusterID, err)
 	if rbdCephMgrSupported && err != nil {
 		log.ErrorLog(ctx, "failed to add task to delete rbd image: %s, %v", ri, err)
 
 		return err
 	}
 
-	if !rbdCephMgrSupported {
-		err = librbd.TrashRemove(ri.ioctx, ri.ImageID, true)
-		if err != nil {
-			log.ErrorLog(ctx, "failed to delete rbd image: %s, %v", ri, err)
+	if !rbdCephMgrSupported && knownErr != nil {
+		trashRemoveError := librbd.TrashRemove(ri.ioctx, ri.ImageID, true)
+		if trashRemoveError != nil {
+			log.ErrorLog(ctx, "failed to delete rbd image: %s, %v", ri, trashRemoveError)
 
-			return err
+			return fmt.Errorf(
+				"failed to add task to remove image: %w, failed to trash remove image: %w",
+				knownErr,
+				trashRemoveError,
+			)
 		}
 	} else {
 		log.DebugLog(ctx, "rbd: successfully added task to move image %q with id %q to trash", ri, ri.ImageID)
@@ -731,7 +752,7 @@ func (rv *rbdVolume) DeleteTempImage(ctx context.Context) error {
 	tempClone := rv.generateTempClone()
 	err := tempClone.Delete(ctx)
 	if err != nil {
-		if errors.Is(err, ErrImageNotFound) {
+		if errors.Is(err, util.ErrImageNotFound) {
 			return tempClone.ensureImageCleanup(ctx)
 		} else {
 			// return error if it is not ErrImageNotFound
@@ -770,7 +791,7 @@ func (ri *rbdImage) getCloneDepth(ctx context.Context) (uint, error) {
 			// if the parent image is moved to trash the name will be present
 			// in rbd image info but the image will be in trash, in that case
 			// return the found depth
-			if errors.Is(err, ErrImageNotFound) {
+			if errors.Is(err, util.ErrImageNotFound) {
 				return depth, nil
 			}
 			log.ErrorLog(ctx, "failed to check depth on image %s: %s", &vol, err)
@@ -852,7 +873,7 @@ func (ri *rbdImage) flattenRbdImage(
 	}
 
 	_, err = ta.AddFlatten(admin.NewImageSpec(ri.Pool, ri.RadosNamespace, ri.RbdImageName))
-	rbdCephMgrSupported := isCephMgrSupported(ctx, ri.ClusterID, err)
+	rbdCephMgrSupported, knownErr := isCephMgrSupported(ctx, ri.ClusterID, err)
 	if rbdCephMgrSupported {
 		if err != nil {
 			// discard flattening error if the image does not have any parent
@@ -869,17 +890,21 @@ func (ri *rbdImage) flattenRbdImage(
 		}
 		log.DebugLog(ctx, "successfully added task to flatten image %q", ri)
 	}
-	if !rbdCephMgrSupported {
+	if !rbdCephMgrSupported && knownErr != nil {
 		log.ErrorLog(
 			ctx,
 			"task manager does not support flatten,image will be flattened once hardlimit is reached: %v",
 			err)
 		if forceFlatten || depth >= hardlimit {
-			err := ri.flatten()
+			flattenImageErr := ri.flatten()
 			if err != nil {
 				log.ErrorLog(ctx, "rbd failed to flatten image %s %s: %v", ri.Pool, ri.RbdImageName, err)
 
-				return err
+				return fmt.Errorf(
+					"failed to add task to remove image: %w, failed to flatten image: %w",
+					knownErr,
+					flattenImageErr,
+				)
 			}
 		}
 	}
@@ -956,7 +981,7 @@ func (ri *rbdImage) checkImageChainHasFeature(ctx context.Context, feature uint6
 			// is in the trash, when we try to open the parent image to get its
 			// information it fails because it is already in trash. We should
 			// treat error as nil if the parent is not found.
-			if errors.Is(err, ErrImageNotFound) {
+			if errors.Is(err, util.ErrImageNotFound) {
 				return false, nil
 			}
 			log.ErrorLog(ctx, "failed to get image info for %s: %s", rbdImg.String(), err)
@@ -1060,14 +1085,14 @@ func genSnapFromSnapID(
 		}
 	}()
 
-	if imageAttributes.KmsID != "" && imageAttributes.EncryptionType == util.EncryptionTypeBlock {
+	if imageAttributes.KmsID != "" && imageAttributes.EncryptionType == crypto.EncryptionTypeBlock {
 		err = rbdSnap.configureBlockEncryption(imageAttributes.KmsID, secrets)
 		if err != nil {
 			return rbdSnap, fmt.Errorf("failed to configure block encryption for "+
 				"%q: %w", rbdSnap, err)
 		}
 	}
-	if imageAttributes.KmsID != "" && imageAttributes.EncryptionType == util.EncryptionTypeFile {
+	if imageAttributes.KmsID != "" && imageAttributes.EncryptionType == crypto.EncryptionTypeFile {
 		err = rbdSnap.configureFileEncryption(ctx, imageAttributes.KmsID, secrets)
 		if err != nil {
 			return rbdSnap, fmt.Errorf("failed to configure file encryption for "+
@@ -1162,13 +1187,13 @@ func generateVolumeFromVolumeID(
 	rbdVol.ImageID = imageAttributes.ImageID
 	rbdVol.Owner = imageAttributes.Owner
 
-	if imageAttributes.KmsID != "" && imageAttributes.EncryptionType == util.EncryptionTypeBlock {
+	if imageAttributes.KmsID != "" && imageAttributes.EncryptionType == crypto.EncryptionTypeBlock {
 		err = rbdVol.configureBlockEncryption(imageAttributes.KmsID, secrets)
 		if err != nil {
 			return rbdVol, err
 		}
 	}
-	if imageAttributes.KmsID != "" && imageAttributes.EncryptionType == util.EncryptionTypeFile {
+	if imageAttributes.KmsID != "" && imageAttributes.EncryptionType == crypto.EncryptionTypeFile {
 		err = rbdVol.configureFileEncryption(ctx, imageAttributes.KmsID, secrets)
 		if err != nil {
 			return rbdVol, err
@@ -1214,7 +1239,7 @@ func GenVolFromVolID(
 	}
 
 	vol, err = generateVolumeFromVolumeID(ctx, volumeID, vi, cr, secrets)
-	if !shouldRetryVolumeGeneration(err) {
+	if !util.ShouldRetryVolumeGeneration(err) {
 		return vol, err
 	}
 
@@ -1225,7 +1250,7 @@ func GenVolFromVolID(
 	}
 	if mapping != nil {
 		rbdVol, vErr := generateVolumeFromMapping(ctx, mapping, volumeID, vi, cr, secrets)
-		if !shouldRetryVolumeGeneration(vErr) {
+		if !util.ShouldRetryVolumeGeneration(vErr) {
 			return rbdVol, vErr
 		}
 	}
@@ -1278,7 +1303,7 @@ func generateVolumeFromMapping(
 					// Add mapping poolID to Identifier
 					nvi.LocationID = pID
 					vol, err = generateVolumeFromVolumeID(ctx, volumeID, nvi, cr, secrets)
-					if !shouldRetryVolumeGeneration(err) {
+					if !util.ShouldRetryVolumeGeneration(err) {
 						return vol, err
 					}
 				}
@@ -1287,33 +1312,6 @@ func generateVolumeFromMapping(
 	}
 
 	return vol, util.ErrPoolNotFound
-}
-
-// shouldRetryVolumeGeneration determines whether the process of finding or generating
-// volumes should continue based on the type of error encountered.
-//
-// It checks if the given error matches any of the following known errors:
-//   - util.ErrKeyNotFound: The key required to locate the volume is missing in Rados omap.
-//   - util.ErrPoolNotFound: The rbd pool where the volume/omap is expected doesn't exist.
-//   - ErrImageNotFound: The image doesn't exist in the rbd pool.
-//   - rados.ErrPermissionDenied: Permissions to access the pool is denied.
-//
-// If any of these errors are encountered, the function returns `true`, indicating
-// that the volume search should continue because of known error. Otherwise, it
-// returns `false`, meaning the search should stop.
-//
-// This helper function is used in scenarios where multiple attempts may be made
-// to retrieve or generate volume information, and we want to gracefully handle
-// specific failure cases while retrying for others.
-func shouldRetryVolumeGeneration(err error) bool {
-	if err == nil {
-		return false // No error, do not retry
-	}
-	// Continue searching for specific known errors
-	return (errors.Is(err, util.ErrKeyNotFound) ||
-		errors.Is(err, util.ErrPoolNotFound) ||
-		errors.Is(err, ErrImageNotFound) ||
-		errors.Is(err, rados.ErrPermissionDenied))
 }
 
 func genVolFromVolumeOptions(
@@ -2031,26 +2029,49 @@ func (ri *rbdImage) DisableDeepFlatten() error {
 	return image.UpdateFeatures(librbd.FeatureDeepFlatten, false)
 }
 
-// listSnapAndChildren returns list of names of snapshots and child images.
-func (ri *rbdImage) listSnapAndChildren() ([]librbd.SnapInfo, []string, error) {
+type snapAndChildrenInfo struct {
+	SnapInfoList           []librbd.SnapInfo
+	TempCloneChildren      []string
+	VolumeSnapshotChildren []string
+}
+
+// listSnapAndChildren returns list of snapshot names, volume snapshot images and
+// child temp clone images. Only child images which are not in trash are returned.
+func (ri *rbdImage) listSnapAndChildren() (*snapAndChildrenInfo, error) {
 	image, err := ri.open()
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	defer image.Close()
 
 	snaps, err := image.GetSnapshotNames()
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	// ListChildren() returns pools, images, err.
-	_, children, err := image.ListChildren()
+	childImageSpecList, err := image.ListChildrenAttributes()
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	return snaps, children, nil
+	tempCloneChildren := make([]string, 0)
+	volSnapChildren := make([]string, 0)
+	for _, child := range childImageSpecList {
+		if child.Trash {
+			continue
+		}
+		if isTempClonedImage(child.ImageName) {
+			tempCloneChildren = append(tempCloneChildren, child.ImageName)
+		} else {
+			volSnapChildren = append(volSnapChildren, child.ImageName)
+		}
+	}
+
+	return &snapAndChildrenInfo{
+		SnapInfoList:           snaps,
+		TempCloneChildren:      tempCloneChildren,
+		VolumeSnapshotChildren: volSnapChildren,
+	}, nil
 }
 
 func (ri *rbdImage) isCompatibleEncryption(dst *rbdImage) error {
@@ -2234,8 +2255,9 @@ func (rv *rbdVolume) PrepareVolumeForSnapshot(ctx context.Context, cr *util.Cred
 		return err
 	}
 
-	// choosing 2, since snapshot adds one depth and we'll be flattening the parent.
-	const depthToAvoidFlatten = 2
+	// choosing 3, since snapshot adds one depth, restore pvc will add one in future
+	// and we'll be flattening the parent.
+	const depthToAvoidFlatten = 3
 	if rbdHardMaxCloneDepth > depthToAvoidFlatten {
 		hardLimit = rbdHardMaxCloneDepth - depthToAvoidFlatten
 	}

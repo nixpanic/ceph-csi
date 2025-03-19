@@ -55,6 +55,9 @@ CEPH_VERSION ?= $(shell . $(CURDIR)/build.env ; echo $${CEPH_VERSION})
 # TODO: ceph_preview tag required for FSQuiesce API
 GO_TAGS_LIST ?= $(CEPH_VERSION) ceph_preview
 
+# CephCSI currently has 4 modules in these directories.
+GO_MODULES_LIST = ./ e2e/ api/ actions/retest
+
 # go build flags
 LDFLAGS ?=
 LDFLAGS += -X $(GO_PROJECT)/internal/util.GitCommit=$(GIT_COMMIT)
@@ -108,10 +111,11 @@ go-test-api: check-env
 	@pushd api && ../scripts/test-go.sh && popd
 
 mod-check: check-env
-	@echo 'running: go mod verify'
-	@go mod verify && [ "$(shell sha512sum go.mod)" = "`sha512sum go.mod`" ] || ( echo "ERROR: go.mod was modified by 'go mod verify'" && false )
-	@echo 'running: go list -mod=readonly -m all'
-	@go list -mod=readonly -m all 1> /dev/null
+	for module in $(GO_MODULES_LIST); do \
+		echo "running: go mod checks in $$module"; \
+		(cd "$$module" && go mod tidy && go mod vendor && go mod verify);\
+	done
+	test -z "$(shell git status --short)" || (echo "files were modified during go mod checks: " ; git status --short ; false)
 
 scripts/golangci.yml: scripts/golangci.yml.in
 	rm -f scripts/golangci.yml.buildtags.in
@@ -170,7 +174,7 @@ cephcsi: check-env
 	GOOS=linux go build $(GO_TAGS) -mod vendor -a -ldflags '$(LDFLAGS)' -o _output/cephcsi ./cmd/
 
 e2e.test: check-env
-	go test $(GO_TAGS) -mod=vendor -c ./e2e
+	cd e2e && go test $(GO_TAGS) -mod=vendor -c -o ../e2e.test ./
 
 .PHONY: rbd-group-snapshot
 rbd-group-snapshot:
