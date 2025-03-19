@@ -231,6 +231,12 @@ func (cs *ControllerServer) parseVolCreateRequest(
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
+	// Get QosParameters from SC if qos configuration existing in SC
+	err = rbdVol.SetQOS(ctx, req.GetParameters())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+
 	err = rbdVol.Connect(cr)
 	if err != nil {
 		log.ErrorLog(ctx, "failed to connect to volume %v: %v", rbdVol.RbdImageName, err)
@@ -244,6 +250,17 @@ func (cs *ControllerServer) parseVolCreateRequest(
 }
 
 func (rbdVol *rbdVolume) ToCSI(ctx context.Context) (*csi.Volume, error) {
+	switch {
+	case rbdVol.VolID == "":
+		return nil, fmt.Errorf("%q does not have a volume-id set", rbdVol)
+	case rbdVol.Pool == "":
+		return nil, fmt.Errorf("%q does not have a pool set", rbdVol)
+	case rbdVol.JournalPool == "":
+		return nil, fmt.Errorf("%q does not have a journal-pool set", rbdVol)
+	case rbdVol.RbdImageName == "":
+		return nil, fmt.Errorf("%q does not have an image-name set", rbdVol)
+	}
+
 	vol := &csi.Volume{
 		VolumeId:      rbdVol.VolID,
 		CapacityBytes: rbdVol.VolSize,
@@ -415,7 +432,7 @@ func (cs *ControllerServer) CreateVolume(
 		}
 	}()
 
-	err = cs.createBackingImage(ctx, cr, req.GetSecrets(), rbdVol, parentVol, rbdSnap)
+	err = cs.createBackingImage(ctx, cr, req.GetSecrets(), rbdVol, parentVol, rbdSnap, req.GetParameters())
 	if err != nil {
 		if errors.Is(err, ErrFlattenInProgress) {
 			return nil, status.Error(codes.Aborted, err.Error())
@@ -573,14 +590,25 @@ func (cs *ControllerServer) repairExistingVolume(ctx context.Context, req *csi.C
 // are more than the `minSnapshotOnImage` Add a task to flatten all the
 // temporary cloned images.
 func flattenTemporaryClonedImages(ctx context.Context, rbdVol *rbdVolume, cr *util.Credentials) error {
-	snaps, children, err := rbdVol.listSnapAndChildren()
+	snapAndChildrenInfo, err := rbdVol.listSnapAndChildren()
 	if err != nil {
-		if errors.Is(err, ErrImageNotFound) {
+		if errors.Is(err, util.ErrImageNotFound) {
 			return status.Error(codes.InvalidArgument, err.Error())
 		}
 
 		return status.Error(codes.Internal, err.Error())
 	}
+	children := make([]string, 0)
+	// order the temp clone images first followed by the volume snapshot
+	// images so that the temp clone images are flattened first.
+	// This is done in order to:
+	// - increase number of snapshots which can be supported for
+	// changed block tracking(rbd snap diff).
+	// - favor scalability since multiple PVCs can be restored from same
+	// volumesnapshot versus just one PVC-PVC clone.
+	children = append(children, snapAndChildrenInfo.TempCloneChildren...)
+	children = append(children, snapAndChildrenInfo.VolumeSnapshotChildren...)
+	snaps := snapAndChildrenInfo.SnapInfoList
 
 	if len(snaps) > int(maxSnapshotsOnImage) {
 		log.DebugLog(
@@ -732,6 +760,7 @@ func (cs *ControllerServer) createBackingImage(
 	secrets map[string]string,
 	rbdVol, parentVol *rbdVolume,
 	rbdSnap *rbdSnapshot,
+	scParams map[string]string,
 ) error {
 	var err error
 
@@ -786,6 +815,21 @@ func (cs *ControllerServer) createBackingImage(
 		return status.Error(codes.Internal, err.Error())
 	}
 
+	// Apply Qos parameters to rbd image.
+	err = rbdVol.ApplyQOS(ctx)
+	if err != nil {
+		log.ErrorLog(ctx, "failed to apply QOS for rbd image: %s with error: %v", rbdVol, err)
+
+		return status.Error(codes.Internal, err.Error())
+	}
+	// Save Qos parameters from SC in Image metadata, we will use it while resize volume.
+	err = rbdVol.SaveQOS(ctx, scParams)
+	if err != nil {
+		log.ErrorLog(ctx, "failed to save QOS for rbd image: %s with error: %v", rbdVol, err)
+
+		return status.Error(codes.Internal, err.Error())
+	}
+
 	return nil
 }
 
@@ -831,7 +875,7 @@ func checkContentSource(
 		rbdvol, err := GenVolFromVolID(ctx, volID, cr, req.GetSecrets())
 		if err != nil {
 			log.ErrorLog(ctx, "failed to get backend image for %s: %v", volID, err)
-			if !errors.Is(err, ErrImageNotFound) {
+			if !errors.Is(err, util.ErrImageNotFound) {
 				return nil, nil, status.Error(codes.Internal, err.Error())
 			}
 
@@ -871,7 +915,7 @@ func (cs *ControllerServer) checkErrAndUndoReserve(
 		return &csi.DeleteVolumeResponse{}, nil
 	}
 
-	if errors.Is(err, ErrImageNotFound) {
+	if errors.Is(err, util.ErrImageNotFound) {
 		notFoundErr := rbdVol.ensureImageCleanup(ctx)
 		if notFoundErr != nil {
 			return nil, status.Errorf(codes.Internal, "failed to cleanup image %q: %v", rbdVol, notFoundErr)
@@ -946,7 +990,7 @@ func (cs *ControllerServer) DeleteVolume(
 			return nil, status.Error(codes.InvalidArgument, pErr.Error())
 		}
 		pErr = deleteMigratedVolume(ctx, pmVolID, cr)
-		if pErr != nil && !errors.Is(pErr, ErrImageNotFound) {
+		if pErr != nil && !errors.Is(pErr, util.ErrImageNotFound) {
 			return nil, status.Error(codes.Internal, pErr.Error())
 		}
 
@@ -1034,7 +1078,7 @@ func cleanupRBDImage(ctx context.Context,
 	if inUse {
 		log.ErrorLog(ctx, "rbd %s is still being used", rbdVol)
 
-		return nil, status.Errorf(codes.Internal, "rbd %s is still being used", rbdVol.RbdImageName)
+		return nil, status.Errorf(codes.Aborted, "rbd %s is still being used", rbdVol.RbdImageName)
 	}
 
 	// delete the temporary rbd image created as part of volume clone during
@@ -1118,7 +1162,7 @@ func (cs *ControllerServer) CreateSnapshot(
 	}()
 	if err != nil {
 		switch {
-		case errors.Is(err, ErrImageNotFound):
+		case errors.Is(err, util.ErrImageNotFound):
 			err = status.Errorf(codes.NotFound, "source Volume ID %s not found", req.GetSourceVolumeId())
 		case errors.Is(err, util.ErrPoolNotFound):
 			log.ErrorLog(ctx, "failed to get backend volume for %s: %v", req.GetSourceVolumeId(), err)
@@ -1226,7 +1270,11 @@ func (cs *ControllerServer) CreateSnapshot(
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	csiSnap, err := vol.toSnapshot().ToCSI(ctx)
+	// FIXME: doSnapshotClone() returns a rbdVolume, some attributes may be missing?
+	snap := vol.toSnapshot()
+	snap.SourceVolumeID = rbdSnap.SourceVolumeID
+
+	csiSnap, err := snap.ToCSI(ctx)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -1459,7 +1507,7 @@ func (cs *ControllerServer) DeleteSnapshot(
 
 		// if the error is ErrImageNotFound, We need to cleanup the image from
 		// trash and remove the metadata in OMAP.
-		if errors.Is(err, ErrImageNotFound) {
+		if errors.Is(err, util.ErrImageNotFound) {
 			log.UsefulLog(ctx, "cleaning up leftovers of snapshot %s: %v", snapshotID, err)
 
 			err = cleanUpImageAndSnapReservation(ctx, rbdSnap, cr)
@@ -1562,7 +1610,7 @@ func (cs *ControllerServer) ControllerExpandVolume(
 	rbdVol, err := genVolFromVolIDWithMigration(ctx, volID, cr, req.GetSecrets())
 	if err != nil {
 		switch {
-		case errors.Is(err, ErrImageNotFound):
+		case errors.Is(err, util.ErrImageNotFound):
 			err = status.Errorf(codes.NotFound, "volume ID %s not found", volID)
 		case errors.Is(err, util.ErrPoolNotFound):
 			log.ErrorLog(ctx, "failed to get backend volume for %s: %v", volID, err)
@@ -1601,6 +1649,13 @@ func (cs *ControllerServer) ControllerExpandVolume(
 		err = rbdVol.resize(volSize)
 		if err != nil {
 			log.ErrorLog(ctx, "failed to resize rbd image: %s with error: %v", rbdVol, err)
+
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+		// adjust rbd qos after resize volume.
+		err = rbdVol.AdjustQOS(ctx)
+		if err != nil {
+			log.ErrorLog(ctx, "failed to adjust QOS for rbd image: %s with error: %v", rbdVol, err)
 
 			return nil, status.Error(codes.Internal, err.Error())
 		}

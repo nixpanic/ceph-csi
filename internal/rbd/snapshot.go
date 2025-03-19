@@ -82,7 +82,7 @@ func cleanUpSnapshot(
 ) error {
 	err := parentVol.deleteSnapshot(ctx, rbdSnap)
 	if err != nil {
-		if !errors.Is(err, ErrImageNotFound) && !errors.Is(err, ErrSnapNotFound) {
+		if !errors.Is(err, util.ErrImageNotFound) && !errors.Is(err, ErrSnapNotFound) {
 			log.ErrorLog(ctx, "failed to delete snapshot %q: %v", rbdSnap, err)
 
 			return err
@@ -92,7 +92,7 @@ func cleanUpSnapshot(
 	if rbdVol != nil {
 		err := rbdVol.Delete(ctx)
 		if err != nil {
-			if !errors.Is(err, ErrImageNotFound) {
+			if !errors.Is(err, util.ErrImageNotFound) {
 				log.ErrorLog(ctx, "failed to delete rbd image %q with error: %v", rbdVol, err)
 
 				return err
@@ -147,6 +147,13 @@ func (rbdSnap *rbdSnapshot) toVolume() *rbdVolume {
 }
 
 func (rbdSnap *rbdSnapshot) ToCSI(ctx context.Context) (*csi.Snapshot, error) {
+	switch {
+	case rbdSnap.VolID == "":
+		return nil, fmt.Errorf("%q does not have a volume-id set", rbdSnap)
+	case rbdSnap.SourceVolumeID == "":
+		return nil, fmt.Errorf("%q does not have a source-volume-id set", rbdSnap)
+	}
+
 	created, err := rbdSnap.GetCreationTime(ctx)
 	if err != nil {
 		return nil, err

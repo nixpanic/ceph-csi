@@ -25,7 +25,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ceph/ceph-csi/internal/util"
+	"github.com/ceph/ceph-csi/pkg/util/kernel"
 
 	snapapi "github.com/kubernetes-csi/external-snapshotter/client/v8/apis/volumesnapshot/v1"
 	v1 "k8s.io/api/core/v1"
@@ -37,7 +37,7 @@ import (
 )
 
 //nolint:mnd // numbers specify Kernel versions.
-var nbdResizeSupport = []util.KernelVersion{
+var nbdResizeSupport = []kernel.KernelVersion{
 	{
 		Version:      5,
 		PatchLevel:   3,
@@ -49,7 +49,7 @@ var nbdResizeSupport = []util.KernelVersion{
 }
 
 //nolint:mnd // numbers specify Kernel versions.
-var fastDiffSupport = []util.KernelVersion{
+var fastDiffSupport = []kernel.KernelVersion{
 	{
 		Version:      5,
 		PatchLevel:   3,
@@ -61,7 +61,7 @@ var fastDiffSupport = []util.KernelVersion{
 }
 
 //nolint:mnd // numbers specify Kernel versions.
-var deepFlattenSupport = []util.KernelVersion{
+var deepFlattenSupport = []kernel.KernelVersion{
 	{
 		Version:      5,
 		PatchLevel:   1,
@@ -76,7 +76,7 @@ var deepFlattenSupport = []util.KernelVersion{
 // www.mail-archive.com/linux-block@vger.kernel.org/msg38060.html
 //
 //nolint:mnd // numbers specify Kernel versions.
-var nbdZeroIOtimeoutSupport = []util.KernelVersion{
+var nbdZeroIOtimeoutSupport = []kernel.KernelVersion{
 	{
 		Version:      5,
 		PatchLevel:   4,
@@ -1162,6 +1162,31 @@ func validateStripe(f *framework.Framework,
 
 	if imgInfo.StripeCount != stripeCount {
 		return fmt.Errorf("stripeCount %d does not match expected %d", imgInfo.StripeCount, stripeCount)
+	}
+
+	return nil
+}
+
+func validateQOS(f *framework.Framework,
+	pvc *v1.PersistentVolumeClaim,
+	wants map[string]string,
+) error {
+	metadataConfPrefix := "conf_"
+
+	imageData, err := getImageInfoFromPVC(pvc.Namespace, pvc.Name, f)
+	if err != nil {
+		return err
+	}
+
+	rbdImageSpec := imageSpec(defaultRBDPool, imageData.imageName)
+	for k, v := range wants {
+		qosVal, err := getImageMeta(rbdImageSpec, metadataConfPrefix+k, f)
+		if err != nil {
+			return err
+		}
+		if qosVal != v {
+			return fmt.Errorf("%s: %s does not match expected %s", k, qosVal, v)
+		}
 	}
 
 	return nil

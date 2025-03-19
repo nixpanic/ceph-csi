@@ -23,10 +23,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ceph/ceph-csi/internal/util"
+	"github.com/ceph/ceph-csi/pkg/util/crypto"
+	"github.com/ceph/ceph-csi/pkg/util/kernel"
 
 	. "github.com/onsi/ginkgo/v2"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -263,10 +265,10 @@ func checkClusternameInMetadata(f *framework.Framework, ns, pool, image string) 
 // ByFileAndBlockEncryption wraps ginkgo's By to run the test body using file and block encryption specific validators.
 func ByFileAndBlockEncryption(
 	text string,
-	callback func(validator encryptionValidateFunc, pvcValidator validateFunc, encryptionType util.EncryptionType),
+	callback func(validator encryptionValidateFunc, pvcValidator validateFunc, encryptionType crypto.EncryptionType),
 ) {
 	By(text+" (block)", func() {
-		callback(validateEncryptedPVCAndAppBinding, isBlockEncryptedPVC, util.EncryptionTypeBlock)
+		callback(validateEncryptedPVCAndAppBinding, isBlockEncryptedPVC, crypto.EncryptionTypeBlock)
 	})
 	By(text+" (file)", func() {
 		if !testRBDFSCrypt {
@@ -274,7 +276,7 @@ func ByFileAndBlockEncryption(
 
 			return
 		}
-		callback(validateEncryptedFilesystemAndAppBinding, isFileEncryptedPVC, util.EncryptionTypeFile)
+		callback(validateEncryptedFilesystemAndAppBinding, isFileEncryptedPVC, crypto.EncryptionTypeFile)
 	})
 }
 
@@ -356,7 +358,7 @@ var _ = Describe("RBD", func() {
 			framework.Failf("failed to get the kernel version: %v", err)
 		}
 		// default io-timeout=0, needs kernel >= 5.4
-		if !util.CheckKernelSupport(kernelRelease, nbdZeroIOtimeoutSupport) {
+		if !kernel.CheckKernelSupport(kernelRelease, nbdZeroIOtimeoutSupport) {
 			nbdMapOptions = "nbd:debug-rbd=20,io-timeout=330"
 		}
 
@@ -1222,7 +1224,7 @@ var _ = Describe("RBD", func() {
 					return
 				}
 
-				if util.CheckKernelSupport(kernelRelease, nbdResizeSupport) {
+				if kernel.CheckKernelSupport(kernelRelease, nbdResizeSupport) {
 					err := deleteResource(rbdExamplePath + "storageclass.yaml")
 					if err != nil {
 						framework.Failf("failed to delete storageclass: %v", err)
@@ -1272,7 +1274,7 @@ var _ = Describe("RBD", func() {
 
 			By("create PVC with layering,fast-diff image-features and bind it to an app",
 				func() {
-					if util.CheckKernelSupport(kernelRelease, fastDiffSupport) {
+					if kernel.CheckKernelSupport(kernelRelease, fastDiffSupport) {
 						err := deleteResource(rbdExamplePath + "storageclass.yaml")
 						if err != nil {
 							framework.Failf("failed to delete storageclass: %v", err)
@@ -1339,7 +1341,7 @@ var _ = Describe("RBD", func() {
 					validateRBDImageCount(f, 1, defaultRBDPool)
 					validateOmapCount(f, 1, rbdType, defaultRBDPool, volumesType)
 
-					if util.CheckKernelSupport(kernelRelease, deepFlattenSupport) {
+					if kernel.CheckKernelSupport(kernelRelease, deepFlattenSupport) {
 						app, aErr := loadApp(appPath)
 						if aErr != nil {
 							framework.Failf("failed to load application: %v", aErr)
@@ -1400,7 +1402,7 @@ var _ = Describe("RBD", func() {
 
 					// checking the minimal kernel version for fast-diff as its
 					// higher kernel version than other default image features.
-					if util.CheckKernelSupport(kernelRelease, fastDiffSupport) {
+					if kernel.CheckKernelSupport(kernelRelease, fastDiffSupport) {
 						app, aErr := loadApp(appPath)
 						if aErr != nil {
 							framework.Failf("failed to load application: %v", aErr)
@@ -1435,7 +1437,7 @@ var _ = Describe("RBD", func() {
 						return
 					}
 
-					if util.CheckKernelSupport(kernelRelease, fastDiffSupport) {
+					if kernel.CheckKernelSupport(kernelRelease, fastDiffSupport) {
 						err := deleteResource(rbdExamplePath + "storageclass.yaml")
 						if err != nil {
 							framework.Failf("failed to delete storageclass: %v", err)
@@ -1967,7 +1969,7 @@ var _ = Describe("RBD", func() {
 				// Writes on kernel < 5.4 are failing due to a bug in NBD driver,
 				// NBD zero cmd timeout handling is fixed with kernel >= 5.4
 				// see https://github.com/ceph/ceph-csi/issues/2204#issuecomment-930941047
-				if util.CheckKernelSupport(kernelRelease, nbdZeroIOtimeoutSupport) {
+				if kernel.CheckKernelSupport(kernelRelease, nbdZeroIOtimeoutSupport) {
 					filePath := app.Spec.Containers[0].VolumeMounts[0].MountPath + "/test"
 					_, stdErr, err = execCommandInPod(
 						f,
@@ -1999,7 +2001,7 @@ var _ = Describe("RBD", func() {
 			})
 
 			ByFileAndBlockEncryption("create a PVC and bind it to an app using rbd-nbd mounter with encryption", func(
-				validator encryptionValidateFunc, _ validateFunc, encType util.EncryptionType,
+				validator encryptionValidateFunc, _ validateFunc, encType crypto.EncryptionType,
 			) {
 				if !testNBD {
 					framework.Logf("skipping NBD test")
@@ -2045,7 +2047,7 @@ var _ = Describe("RBD", func() {
 			})
 
 			ByFileAndBlockEncryption("create a PVC and bind it to an app with encrypted RBD volume", func(
-				validator encryptionValidateFunc, _ validateFunc, encType util.EncryptionType,
+				validator encryptionValidateFunc, _ validateFunc, encType crypto.EncryptionType,
 			) {
 				err := deleteResource(rbdExamplePath + "storageclass.yaml")
 				if err != nil {
@@ -2079,7 +2081,7 @@ var _ = Describe("RBD", func() {
 			})
 
 			ByFileAndBlockEncryption("Resize Encrypted Block PVC and check Device size", func(
-				validator encryptionValidateFunc, _ validateFunc, encType util.EncryptionType,
+				validator encryptionValidateFunc, _ validateFunc, encType crypto.EncryptionType,
 			) {
 				err := deleteResource(rbdExamplePath + "storageclass.yaml")
 				if err != nil {
@@ -2105,7 +2107,7 @@ var _ = Describe("RBD", func() {
 				validateRBDImageCount(f, 0, defaultRBDPool)
 				validateOmapCount(f, 0, rbdType, defaultRBDPool, volumesType)
 
-				if encType != util.EncryptionTypeFile {
+				if encType != crypto.EncryptionTypeFile {
 					// Block PVC resize
 					err = resizePVCAndValidateSize(rawPvcPath, rawAppPath, f)
 					if err != nil {
@@ -2126,7 +2128,7 @@ var _ = Describe("RBD", func() {
 			})
 
 			ByFileAndBlockEncryption("create a PVC and bind it to an app with encrypted RBD volume with VaultKMS", func(
-				validator encryptionValidateFunc, _ validateFunc, encType util.EncryptionType,
+				validator encryptionValidateFunc, _ validateFunc, encType crypto.EncryptionType,
 			) {
 				err := deleteResource(rbdExamplePath + "storageclass.yaml")
 				if err != nil {
@@ -2159,7 +2161,7 @@ var _ = Describe("RBD", func() {
 			})
 
 			ByFileAndBlockEncryption("create a PVC and bind it to an app with encrypted RBD volume with VaultTokensKMS", func(
-				validator encryptionValidateFunc, _ validateFunc, encType util.EncryptionType,
+				validator encryptionValidateFunc, _ validateFunc, encType crypto.EncryptionType,
 			) {
 				err := deleteResource(rbdExamplePath + "storageclass.yaml")
 				if err != nil {
@@ -2213,7 +2215,7 @@ var _ = Describe("RBD", func() {
 			})
 
 			ByFileAndBlockEncryption("create a PVC and bind it to an app with encrypted RBD volume with VaultTenantSA KMS", func(
-				validator encryptionValidateFunc, _ validateFunc, encType util.EncryptionType,
+				validator encryptionValidateFunc, _ validateFunc, encType crypto.EncryptionType,
 			) {
 				err := deleteResource(rbdExamplePath + "storageclass.yaml")
 				if err != nil {
@@ -2253,7 +2255,7 @@ var _ = Describe("RBD", func() {
 			})
 
 			ByFileAndBlockEncryption("create a PVC and bind it to an app with encrypted RBD volume with SecretsMetadataKMS",
-				func(validator encryptionValidateFunc, _ validateFunc, encType util.EncryptionType) {
+				func(validator encryptionValidateFunc, _ validateFunc, encType crypto.EncryptionType) {
 					err := deleteResource(rbdExamplePath + "storageclass.yaml")
 					if err != nil {
 						framework.Failf("failed to delete storageclass: %v", err)
@@ -2285,7 +2287,7 @@ var _ = Describe("RBD", func() {
 				})
 
 			ByFileAndBlockEncryption("test RBD volume encryption with user secrets based SecretsMetadataKMS", func(
-				validator encryptionValidateFunc, _ validateFunc, encType util.EncryptionType,
+				validator encryptionValidateFunc, _ validateFunc, encType crypto.EncryptionType,
 			) {
 				err := deleteResource(rbdExamplePath + "storageclass.yaml")
 				if err != nil {
@@ -2340,7 +2342,7 @@ var _ = Describe("RBD", func() {
 
 			ByFileAndBlockEncryption(
 				"test RBD volume encryption with user secrets based SecretsMetadataKMS with tenant namespace",
-				func(validator encryptionValidateFunc, isEncryptedPVC validateFunc, encType util.EncryptionType) {
+				func(validator encryptionValidateFunc, isEncryptedPVC validateFunc, encType crypto.EncryptionType) {
 					err := deleteResource(rbdExamplePath + "storageclass.yaml")
 					if err != nil {
 						framework.Failf("failed to delete storageclass: %v", err)
@@ -2466,7 +2468,7 @@ var _ = Describe("RBD", func() {
 			})
 
 			ByFileAndBlockEncryption("create an encrypted PVC snapshot and restore it for an app with VaultKMS", func(
-				validator encryptionValidateFunc, isEncryptedPVC validateFunc, encType util.EncryptionType,
+				validator encryptionValidateFunc, isEncryptedPVC validateFunc, encType crypto.EncryptionType,
 			) {
 				err := deleteResource(rbdExamplePath + "storageclass.yaml")
 				if err != nil {
@@ -2499,7 +2501,7 @@ var _ = Describe("RBD", func() {
 			})
 
 			ByFileAndBlockEncryption("Validate PVC restore from vaultKMS to vaultTenantSAKMS", func(
-				validator encryptionValidateFunc, isEncryptedPVC validateFunc, encType util.EncryptionType,
+				validator encryptionValidateFunc, isEncryptedPVC validateFunc, encType crypto.EncryptionType,
 			) {
 				restoreSCName := "restore-sc"
 				err := deleteResource(rbdExamplePath + "storageclass.yaml")
@@ -2559,7 +2561,7 @@ var _ = Describe("RBD", func() {
 			})
 
 			ByFileAndBlockEncryption("Validate PVC-PVC clone with different SC from vaultKMS to vaultTenantSAKMS", func(
-				validator encryptionValidateFunc, isValidPVC validateFunc, encType util.EncryptionType,
+				validator encryptionValidateFunc, isValidPVC validateFunc, encType crypto.EncryptionType,
 			) {
 				restoreSCName := "restore-sc"
 				err := deleteResource(rbdExamplePath + "storageclass.yaml")
@@ -2623,7 +2625,7 @@ var _ = Describe("RBD", func() {
 			})
 
 			ByFileAndBlockEncryption("create an encrypted PVC-PVC clone and bind it to an app", func(
-				validator encryptionValidateFunc, isValidPVC validateFunc, encType util.EncryptionType,
+				validator encryptionValidateFunc, isValidPVC validateFunc, encType crypto.EncryptionType,
 			) {
 				err := deleteResource(rbdExamplePath + "storageclass.yaml")
 				if err != nil {
@@ -2661,7 +2663,7 @@ var _ = Describe("RBD", func() {
 			})
 
 			ByFileAndBlockEncryption("create an encrypted PVC-PVC clone and bind it to an app with VaultKMS", func(
-				validator encryptionValidateFunc, isValidPVC validateFunc, encType util.EncryptionType,
+				validator encryptionValidateFunc, isValidPVC validateFunc, encType crypto.EncryptionType,
 			) {
 				err := deleteResource(rbdExamplePath + "storageclass.yaml")
 				if err != nil {
@@ -4361,7 +4363,7 @@ var _ = Describe("RBD", func() {
 				})
 
 				ByFileAndBlockEncryption("restore snapshot to bigger size encrypted PVC with VaultKMS", func(
-					_ encryptionValidateFunc, _ validateFunc, encType util.EncryptionType,
+					_ encryptionValidateFunc, _ validateFunc, encType crypto.EncryptionType,
 				) {
 					scOpts := map[string]string{
 						"encrypted":       "true",
@@ -4398,7 +4400,7 @@ var _ = Describe("RBD", func() {
 					if err != nil {
 						framework.Failf("failed to validate restore bigger size clone: %v", err)
 					}
-					if encType != util.EncryptionTypeFile {
+					if encType != crypto.EncryptionTypeFile {
 						// validate block mode PVC
 						err = validateBiggerPVCFromSnapshot(f,
 							rawPvcPath,
@@ -4424,7 +4426,7 @@ var _ = Describe("RBD", func() {
 
 			By("clone PVC to a bigger size PVC", func() {
 				ByFileAndBlockEncryption("clone PVC to bigger size encrypted PVC with VaultKMS", func(
-					validator encryptionValidateFunc, _ validateFunc, encType util.EncryptionType,
+					validator encryptionValidateFunc, _ validateFunc, encType crypto.EncryptionType,
 				) {
 					scOpts := map[string]string{
 						"encrypted":       "true",
@@ -4451,7 +4453,7 @@ var _ = Describe("RBD", func() {
 					if err != nil {
 						framework.Failf("failed to validate bigger size clone: %v", err)
 					}
-					if encType != util.EncryptionTypeFile {
+					if encType != crypto.EncryptionTypeFile {
 						// validate block mode PVC
 						err = validateBiggerCloneFromPVC(f,
 							rawPvcPath,
@@ -4642,6 +4644,284 @@ var _ = Describe("RBD", func() {
 					framework.Failf("failed to delete PVC: %v", err)
 				}
 				// validate created backend rbd images
+				validateRBDImageCount(f, 0, defaultRBDPool)
+				validateOmapCount(f, 0, rbdType, defaultRBDPool, volumesType)
+			})
+
+			By("validate rbd image qos", func() {
+				var (
+					baseReadIops            = "2000"
+					baseWriteIops           = "1000"
+					baseReadBytesPerSecond  = "209715200"
+					baseWriteBytesPerSecond = "104857600"
+					readIopsPerGiB          = "20"
+					writeIopsPerGiB         = "10"
+					readBpsPerGiB           = "2097152"
+					writeBpsPerGiB          = "1048576"
+					baseVolSizeBytes        = "21474836480"
+				)
+				qosParameters := map[string]string{
+					"BaseReadIops":            baseReadIops,
+					"BaseWriteIops":           baseWriteIops,
+					"BaseReadBytesPerSecond":  baseReadBytesPerSecond,
+					"BaseWriteBytesPerSecond": baseWriteBytesPerSecond,
+				}
+				err := deleteResource(rbdExamplePath + "storageclass.yaml")
+				if err != nil {
+					framework.Failf("failed to delete storageclass: %v", err)
+				}
+
+				err = createRBDStorageClass(
+					f.ClientSet,
+					f,
+					defaultSCName,
+					nil,
+					qosParameters,
+					deletePolicy)
+				if err != nil {
+					framework.Failf("failed to create storageclass: %v", err)
+				}
+				defer func() {
+					err = deleteResource(rbdExamplePath + "storageclass.yaml")
+					if err != nil {
+						framework.Failf("failed to delete storageclass: %v", err)
+					}
+					err = createRBDStorageClass(f.ClientSet, f, defaultSCName, nil, nil, deletePolicy)
+					if err != nil {
+						framework.Failf("failed to create storageclass: %v", err)
+					}
+				}()
+
+				// 1.1 create PVC
+				pvc, err := loadPVC(pvcPath)
+				if err != nil {
+					framework.Failf("failed to load PVC: %v", err)
+				}
+				pvc.Namespace = f.UniqueName
+				err = createPVCAndvalidatePV(f.ClientSet, pvc, deployTimeout)
+				if err != nil {
+					framework.Failf("failed to create PVC and application: %v", err)
+				}
+				// validate created backend rbd images
+				validateRBDImageCount(f, 1, defaultRBDPool)
+				validateOmapCount(f, 1, rbdType, defaultRBDPool, volumesType)
+
+				// 1.2 validate rbd image qos
+				wants := map[string]string{
+					"rbd_qos_read_iops_limit":  baseReadIops,
+					"rbd_qos_write_iops_limit": baseWriteIops,
+					"rbd_qos_read_bps_limit":   baseReadBytesPerSecond,
+					"rbd_qos_write_bps_limit":  baseWriteBytesPerSecond,
+				}
+				err = validateQOS(f, pvc, wants)
+				if err != nil {
+					framework.Failf("failed to validate qos: %v", err)
+				}
+
+				// 1.3 delete pvc
+				err = deletePVCAndValidatePV(f.ClientSet, pvc, deployTimeout)
+				if err != nil {
+					framework.Failf("failed to delete PVC: %v", err)
+				}
+
+				qosParameters = map[string]string{
+					"BaseReadIops":            baseReadIops,
+					"BaseWriteIops":           baseWriteIops,
+					"BaseReadBytesPerSecond":  baseReadBytesPerSecond,
+					"BaseWriteBytesPerSecond": baseWriteBytesPerSecond,
+					"ReadIopsPerGiB":          readIopsPerGiB,
+					"WriteIopsPerGiB":         writeIopsPerGiB,
+					"ReadBpsPerGiB":           readBpsPerGiB,
+					"WriteBpsPerGiB":          writeBpsPerGiB,
+					"BaseVolSizeBytes":        baseVolSizeBytes,
+				}
+				err = deleteResource(rbdExamplePath + "storageclass.yaml")
+				if err != nil {
+					framework.Failf("failed to delete storageclass: %v", err)
+				}
+
+				err = createRBDStorageClass(
+					f.ClientSet,
+					f,
+					defaultSCName,
+					nil,
+					qosParameters,
+					deletePolicy)
+				if err != nil {
+					framework.Failf("failed to create storageclass: %v", err)
+				}
+
+				// 2.1 create PVC
+				pvc, err = loadPVC(pvcPath)
+				if err != nil {
+					framework.Failf("failed to load PVC: %v", err)
+				}
+				pvc.Namespace = f.UniqueName
+				pvc.Spec.Resources.Requests[v1.ResourceStorage] = resource.MustParse("100Gi")
+				err = createPVCAndvalidatePV(f.ClientSet, pvc, deployTimeout)
+				if err != nil {
+					framework.Failf("failed to create PVC and application: %v", err)
+				}
+				// validate created backend rbd images
+				validateRBDImageCount(f, 1, defaultRBDPool)
+				validateOmapCount(f, 1, rbdType, defaultRBDPool, volumesType)
+
+				// 2.2 validate rbd image qos
+				wants = map[string]string{
+					"rbd_qos_read_iops_limit":  "3600",
+					"rbd_qos_write_iops_limit": "1800",
+					"rbd_qos_read_bps_limit":   "377487360",
+					"rbd_qos_write_bps_limit":  "188743680",
+				}
+				err = validateQOS(f, pvc, wants)
+				if err != nil {
+					framework.Failf("failed to validate qos: %v", err)
+				}
+
+				// 3.1 create snapshot
+				err = createRBDSnapshotClass(f)
+				if err != nil {
+					framework.Failf("failed to create storageclass: %v", err)
+				}
+				defer func() {
+					err = deleteRBDSnapshotClass()
+					if err != nil {
+						framework.Failf("failed to delete VolumeSnapshotClass: %v", err)
+					}
+				}()
+
+				snap := getSnapshot(snapshotPath)
+				snap.Namespace = f.UniqueName
+				snap.Spec.Source.PersistentVolumeClaimName = &pvc.Name
+				err = createSnapshot(&snap, deployTimeout)
+				if err != nil {
+					framework.Failf("failed to create snapshot: %v", err)
+				}
+				// validate created backend rbd images
+				// parent PVC + snapshot
+				totalImages := 2
+				validateRBDImageCount(f, totalImages, defaultRBDPool)
+				validateOmapCount(f, 1, rbdType, defaultRBDPool, volumesType)
+				validateOmapCount(f, 1, rbdType, defaultRBDPool, snapsType)
+
+				// 3.2 create pvc from snapshot
+				pvcClone, err := loadPVC(pvcClonePath)
+				if err != nil {
+					framework.Failf("failed to load PVC: %v", err)
+				}
+				pvcClone.Namespace = f.UniqueName
+				pvcClone.Spec.Resources.Requests[v1.ResourceStorage] = resource.MustParse("100Gi")
+				err = createPVCAndvalidatePV(f.ClientSet, pvcClone, deployTimeout)
+				if err != nil {
+					framework.Failf("failed to create PVC: %v", err)
+				}
+				// validate created backend rbd images
+				// parent pvc + snapshot + clone
+				totalImages = 3
+				validateRBDImageCount(f, totalImages, defaultRBDPool)
+				validateOmapCount(f, 2, rbdType, defaultRBDPool, volumesType)
+				validateOmapCount(f, 1, rbdType, defaultRBDPool, snapsType)
+
+				// 3.3 validate rbd image qos
+				err = validateQOS(f, pvcClone, wants)
+				if err != nil {
+					framework.Failf("failed to validate qos: %v", err)
+				}
+
+				// 3.4 delete clone pvc
+				err = deletePVCAndValidatePV(f.ClientSet, pvcClone, deployTimeout)
+				if err != nil {
+					framework.Failf("failed to delete PVC: %v", err)
+				}
+
+				// 3.5 validate create pvc from snapshot, but pvc size greater than parent
+				pvcClone, err = loadPVC(pvcClonePath)
+				if err != nil {
+					framework.Failf("failed to load PVC: %v", err)
+				}
+				pvcClone.Namespace = f.UniqueName
+				pvcClone.Spec.Resources.Requests[v1.ResourceStorage] = resource.MustParse("200Gi")
+				err = createPVCAndvalidatePV(f.ClientSet, pvcClone, deployTimeout)
+				if err != nil {
+					framework.Failf("failed to create PVC: %v", err)
+				}
+				wants2 := map[string]string{
+					"rbd_qos_read_iops_limit":  "5600",
+					"rbd_qos_write_iops_limit": "2800",
+					"rbd_qos_read_bps_limit":   "587202560",
+					"rbd_qos_write_bps_limit":  "293601280",
+				}
+				err = validateQOS(f, pvcClone, wants2)
+				if err != nil {
+					framework.Failf("failed to validate qos: %v", err)
+				}
+
+				// 3.6 delete snapshot and clone pvc
+				err = deleteSnapshot(&snap, deployTimeout)
+				if err != nil {
+					framework.Failf("failed to delete snapshot: %v", err)
+				}
+				err = deletePVCAndValidatePV(f.ClientSet, pvcClone, deployTimeout)
+				if err != nil {
+					framework.Failf("failed to delete PVC: %v", err)
+				}
+
+				// 4.1 create pvc from pvc
+				pvcSmartClone, err := loadPVC(pvcSmartClonePath)
+				if err != nil {
+					framework.Failf("failed to load pvcSmartClone: %v", err)
+				}
+				pvcSmartClone.Namespace = f.UniqueName
+				pvcSmartClone.Spec.Resources.Requests[v1.ResourceStorage] = resource.MustParse("100Gi")
+				err = createPVCAndvalidatePV(f.ClientSet, pvcSmartClone, deployTimeout)
+				if err != nil {
+					framework.Failf("failed to create pvc: %v", err)
+				}
+				// validate created backend rbd images
+				// parent pvc + temp clone + clone
+				totalImages = 3
+				validateRBDImageCount(f, totalImages, defaultRBDPool)
+				validateOmapCount(f, 2, rbdType, defaultRBDPool, volumesType)
+
+				// 4.2 validate rbd image qos
+				err = validateQOS(f, pvcSmartClone, wants)
+				if err != nil {
+					framework.Failf("failed to validate qos: %v", err)
+				}
+
+				// 4.3 delete clone pvc
+				err = deletePVCAndValidatePV(f.ClientSet, pvcSmartClone, deployTimeout)
+				if err != nil {
+					framework.Failf("failed to delete PVC: %v", err)
+				}
+
+				// 4.4 create pvc from pvc, but pvc size greater than parent
+				pvcSmartClone, err = loadPVC(pvcSmartClonePath)
+				if err != nil {
+					framework.Failf("failed to load pvcSmartClone: %v", err)
+				}
+				pvcSmartClone.Namespace = f.UniqueName
+				pvcSmartClone.Spec.Resources.Requests[v1.ResourceStorage] = resource.MustParse("200Gi")
+				err = createPVCAndvalidatePV(f.ClientSet, pvcSmartClone, deployTimeout)
+				if err != nil {
+					framework.Failf("failed to create pvc: %v", err)
+				}
+				err = validateQOS(f, pvcSmartClone, wants2)
+				if err != nil {
+					framework.Failf("failed to validate qos: %v", err)
+				}
+
+				// 4.5 delete parent pvc and clone pvc
+				err = deletePVCAndValidatePV(f.ClientSet, pvc, deployTimeout)
+				if err != nil {
+					framework.Failf("failed to delete PVC: %v", err)
+				}
+				err = deletePVCAndValidatePV(f.ClientSet, pvcSmartClone, deployTimeout)
+				if err != nil {
+					framework.Failf("failed to delete PVC: %v", err)
+				}
+
+				// END: validate created backend rbd images
 				validateRBDImageCount(f, 0, defaultRBDPool)
 				validateOmapCount(f, 0, rbdType, defaultRBDPool, volumesType)
 			})
