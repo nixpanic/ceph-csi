@@ -96,6 +96,8 @@ updates:
     commit-message:
       prefix: "rebase"
   - package-ecosystem: "gomod"
+    # ODF only: disable PR creation, synced from upstream
+    open-pull-requests-limit: 0
     directory: "/e2e"
     schedule:
       interval: "weekly"
