@@ -22,6 +22,7 @@ import (
 	"fmt"
 
 	"github.com/ceph/ceph-csi/internal/journal"
+	rbderrors "github.com/ceph/ceph-csi/internal/rbd/errors"
 	rbd_group "github.com/ceph/ceph-csi/internal/rbd/group"
 	"github.com/ceph/ceph-csi/internal/rbd/types"
 	"github.com/ceph/ceph-csi/internal/util"
@@ -82,6 +83,12 @@ func (mgr *rbdManager) getCredentials() (*util.Credentials, error) {
 	return creds, nil
 }
 
+// getVolumeGroupNamePrefix returns the prefix for the volume group if set, or
+// an empty string if none is configured.
+func (mgr *rbdManager) getVolumeGroupNamePrefix() string {
+	return mgr.parameters["volumeGroupNamePrefix"]
+}
+
 func (mgr *rbdManager) getVolumeGroupJournal(clusterID string) (journal.VolumeGroupJournal, error) {
 	if mgr.vgJournal != nil {
 		return mgr.vgJournal, nil
@@ -122,11 +129,13 @@ func (mgr *rbdManager) getVolumeGroupJournal(clusterID string) (journal.VolumeGr
 // 3. an error or nil.
 func (mgr *rbdManager) getGroupUUID(
 	ctx context.Context,
-	clusterID, journalPool, name, prefix string,
+	clusterID, journalPool, name string,
 ) (string, func(), error) {
 	nothingToUndo := func() {
 		// the reservation was not done, no need to undo the reservation
 	}
+
+	prefix := mgr.getVolumeGroupNamePrefix()
 
 	vgJournal, err := mgr.getVolumeGroupJournal(clusterID)
 	if err != nil {
@@ -174,7 +183,7 @@ func (mgr *rbdManager) GetVolumeByID(ctx context.Context, id string) (types.Volu
 	volume, err := GenVolFromVolID(ctx, id, creds, mgr.secrets)
 	if err != nil {
 		switch {
-		case errors.Is(err, util.ErrImageNotFound):
+		case errors.Is(err, rbderrors.ErrImageNotFound):
 			err = fmt.Errorf("volume %s not found: %w", id, err)
 
 			return nil, err
@@ -199,7 +208,7 @@ func (mgr *rbdManager) GetSnapshotByID(ctx context.Context, id string) (types.Sn
 	snapshot, err := genSnapFromSnapID(ctx, id, creds, mgr.secrets)
 	if err != nil {
 		switch {
-		case errors.Is(err, util.ErrImageNotFound):
+		case errors.Is(err, rbderrors.ErrImageNotFound):
 			err = fmt.Errorf("volume %s not found: %w", id, err)
 
 			return nil, err
@@ -227,6 +236,21 @@ func (mgr *rbdManager) GetVolumeGroupByID(ctx context.Context, id string) (types
 	}
 
 	return vg, nil
+}
+
+func (mgr *rbdManager) MakeVolumeGroupID(ctx context.Context, poolID int64, name string) (string, error) {
+	clusterID, err := util.GetClusterID(mgr.parameters)
+	if err != nil {
+		return "", fmt.Errorf("failed to get cluster-id: %w", err)
+	}
+
+	// convert the clusterid, poolid and name to an id/handle
+	id, err := journal.MakeVolumeGroupID(clusterID, poolID, name, mgr.getVolumeGroupNamePrefix())
+	if err != nil {
+		return "", fmt.Errorf("failed to convert name %q to a CSI-handle: %w", name, err)
+	}
+
+	return id, nil
 }
 
 func (mgr *rbdManager) CreateVolumeGroup(ctx context.Context, name string) (types.VolumeGroup, error) {
@@ -258,7 +282,7 @@ func (mgr *rbdManager) CreateVolumeGroup(ctx context.Context, name string) (type
 	}
 
 	// volumeGroupNamePrefix is an optional parameter, can be an empty string
-	prefix := mgr.parameters["volumeGroupNamePrefix"]
+	prefix := mgr.getVolumeGroupNamePrefix()
 
 	// check if the journal contains a generated name for the group already
 	vgData, err := vgJournal.CheckReservation(ctx, journalPool, name, prefix)
@@ -346,15 +370,12 @@ func (mgr *rbdManager) GetVolumeGroupSnapshotByName(
 		return nil, errors.New("required 'pool' option missing in volume group parameters")
 	}
 
-	// volumeGroupNamePrefix is an optional parameter, can be an empty string
-	prefix := mgr.parameters["volumeGroupNamePrefix"]
-
 	clusterID, err := util.GetClusterID(mgr.parameters)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get cluster-id: %w", err)
 	}
 
-	uuid, freeUUID, err := mgr.getGroupUUID(ctx, clusterID, pool, name, prefix)
+	uuid, freeUUID, err := mgr.getGroupUUID(ctx, clusterID, pool, name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get a UUID for volume group snapshot %q: %w", name, err)
 	}
@@ -409,15 +430,12 @@ func (mgr *rbdManager) CreateVolumeGroupSnapshot(
 		return nil, err
 	}
 
-	// volumeGroupNamePrefix is an optional parameter, can be an empty string
-	prefix := mgr.parameters["volumeGroupNamePrefix"]
-
 	clusterID, err := vg.GetClusterID(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get cluster id for volume group snapshot %q: %w", vg, err)
 	}
 
-	uuid, freeUUID, err := mgr.getGroupUUID(ctx, clusterID, pool, name, prefix)
+	uuid, freeUUID, err := mgr.getGroupUUID(ctx, clusterID, pool, name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get a UUID for volume group snapshot %q: %w", vg, err)
 	}
@@ -467,7 +485,7 @@ func (mgr *rbdManager) CreateVolumeGroupSnapshot(
 
 			return vgs, nil
 		}
-	} else if err != nil && !errors.Is(err, util.ErrImageNotFound) {
+	} else if err != nil && !errors.Is(err, rbderrors.ErrImageNotFound) {
 		// ErrImageNotFound can be returned if the VolumeGroupSnapshot
 		// could not be found. It is expected that it does not exist
 		// yet, in which case it will be created below.
@@ -537,7 +555,7 @@ func (mgr *rbdManager) RegenerateVolumeGroupJournal(
 
 	err = gi.DecomposeCSIID(groupID)
 	if err != nil {
-		return "", fmt.Errorf("%w: error decoding volume group ID (%w) (%s)", ErrInvalidVolID, err, groupID)
+		return "", fmt.Errorf("%w: error decoding volume group ID (%w) (%s)", rbderrors.ErrInvalidVolID, err, groupID)
 	}
 
 	monitors, clusterID, err = util.FetchMappedClusterIDAndMons(ctx, gi.ClusterID)
@@ -633,4 +651,77 @@ func (mgr *rbdManager) RegenerateVolumeGroupJournal(
 		groupHandle, vgName, requestName)
 
 	return groupHandle, nil
+}
+
+// CompareVolumesInGroup returns 'true' when the list of volumes matches the
+// volumes in the group. In case a volume belongs to no group, or an other
+// group than the VolumeGroup, 'false' is returned.
+func (mgr *rbdManager) CompareVolumesInGroup(
+	ctx context.Context,
+	volumes []types.Volume,
+	vg types.VolumeGroup,
+) (bool, error) {
+	vgVols, err := vg.ListVolumes(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to list volumes in group %q: %w", vg, err)
+	}
+
+	// the vg is allowed to be empty, or have the exact number of volumes
+	if !(len(vgVols) == 0 || len(vgVols) == len(volumes)) {
+		return false, fmt.Errorf(
+			"volume group %q has more or less volumes (%d) than expected (%d)",
+			vg,
+			len(vgVols),
+			len(volumes))
+	}
+
+	vgID, err := vg.GetID(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to get name for volume group %q: %w", vg, err)
+	}
+
+	// verify that all volumes are part of the vg, or do not have a group at all
+	matchingGroup, err := mgr.VolumesInSameGroup(ctx, volumes)
+	if err != nil {
+		return false, err
+	} else if !matchingGroup {
+		return false, nil
+	}
+
+	// all volumes are in the same group
+	groupID, err := volumes[0].GetVolumeGroupID(ctx, mgr)
+	if err != nil && !errors.Is(err, rbderrors.ErrGroupNotFound) {
+		return false, fmt.Errorf("failed to get group for volume %q: %w", volumes[0], err)
+	}
+
+	// if none of the volumes is in a group, groupID will be ""
+	if groupID != "" && vgID != groupID {
+		log.DebugLog(ctx, "expecting group %q but volume %q has group %q", vgID, volumes[0], groupID)
+
+		return false, nil
+	}
+
+	return true, nil
+}
+
+// VolumesInSameGroup returns 'true' when all volumes are in the same group, or
+// in no group at all.
+func (mgr *rbdManager) VolumesInSameGroup(ctx context.Context, volumes []types.Volume) (bool, error) {
+	var lastID *string
+	for _, v := range volumes {
+		id, err := v.GetVolumeGroupID(ctx, mgr)
+		if err != nil && !errors.Is(err, rbderrors.ErrGroupNotFound) {
+			return false, fmt.Errorf("failed to get group name for volume %q: %w", v, err)
+		}
+
+		// all volumes should be part of the same group
+		// lastID == nil in the 1st loop
+		if lastID != nil && *lastID != id {
+			return false, fmt.Errorf("volume %q belongs to group %q, but expected %q", v, id, *lastID)
+		}
+
+		lastID = &id
+	}
+
+	return true, nil
 }

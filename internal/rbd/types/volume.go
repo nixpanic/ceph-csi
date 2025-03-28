@@ -36,6 +36,11 @@ type snapshottableVolume interface {
 }
 
 type csiAddonsVolume interface {
+	// GetVolumeGroupID returns the name of the VolumeGroup where this
+	// Volume belongs to. If the rbdVolume does not belong to a
+	// VolumeGroup, a ErrGroupNotFound is returned.
+	GetVolumeGroupID(ctx context.Context, resolver VolumeGroupResolver) (string, error)
+
 	// AddToGroup adds the Volume to the VolumeGroup.
 	AddToGroup(ctx context.Context, vg VolumeGroup) error
 
@@ -66,9 +71,6 @@ type Volume interface {
 	journalledObject
 	snapshottableVolume
 	csiAddonsVolume
-
-	// Destroy frees the resources used by the Volume.
-	Destroy(ctx context.Context)
 
 	// Delete removes the volume from the storage backend.
 	Delete(ctx context.Context) error
