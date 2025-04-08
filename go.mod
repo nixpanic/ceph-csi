@@ -33,12 +33,12 @@ require (
 	golang.org/x/net v0.37.0
 	golang.org/x/sys v0.31.0
 	google.golang.org/grpc v1.71.0
-	google.golang.org/protobuf v1.36.5
-	k8s.io/api v0.32.2
-	k8s.io/apimachinery v0.32.2
+	google.golang.org/protobuf v1.36.6
+	k8s.io/api v0.32.3
+	k8s.io/apimachinery v0.32.3
 	k8s.io/cloud-provider v0.32.2
 	k8s.io/klog/v2 v2.130.1
-	k8s.io/kubernetes v1.32.2
+	k8s.io/kubernetes v1.32.3
 	k8s.io/mount-utils v0.32.2
 	k8s.io/utils v0.0.0-20241210054802-24370beab758
 )
@@ -46,7 +46,7 @@ require (
 require (
 	// sigs.k8s.io/controller-runtime wants this version, it gets replaced below
 	k8s.io/client-go v12.0.0+incompatible
-	sigs.k8s.io/controller-runtime v0.20.3
+	sigs.k8s.io/controller-runtime v0.20.4
 )
 
 replace k8s.io/client-go => k8s.io/client-go v0.32.2
@@ -93,7 +93,7 @@ require (
 	github.com/go-openapi/jsonreference v0.21.0 // indirect
 	github.com/go-openapi/swag v0.23.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
-	github.com/golang-jwt/jwt/v5 v5.2.1 // indirect
+	github.com/golang-jwt/jwt/v5 v5.2.2 // indirect
 	github.com/google/btree v1.1.3 // indirect
 	github.com/google/gnostic-models v0.6.9 // indirect
 	github.com/google/go-cmp v0.6.0 // indirect

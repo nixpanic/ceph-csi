@@ -26,6 +26,7 @@ import (
 	"github.com/ceph/go-ceph/rados"
 
 	"github.com/ceph/ceph-csi/internal/journal"
+	rbderrors "github.com/ceph/ceph-csi/internal/rbd/errors"
 	"github.com/ceph/ceph-csi/internal/util"
 	"github.com/ceph/ceph-csi/internal/util/log"
 )
@@ -65,7 +66,7 @@ type commonVolumeGroup struct {
 }
 
 // generateVolumeGroup generates a commonVolumeGroup structure from the volumeGroup identifier.
-func (cvg *commonVolumeGroup) generateVolumeGroup(csiID util.CSIIdentifier) error {
+func (cvg *commonVolumeGroup) generateVolumeGroup(ctx context.Context, csiID util.CSIIdentifier) error {
 	mons, err := util.Mons(util.CsiConfigFile, csiID.ClusterID)
 	if err != nil {
 		return fmt.Errorf("failed to get MONs for cluster id %q: %w", csiID.ClusterID, err)
@@ -85,16 +86,25 @@ func (cvg *commonVolumeGroup) generateVolumeGroup(csiID util.CSIIdentifier) erro
 	cvg.namespace = namespace
 	cvg.pool = pool
 
+	// Check if the volume group exists in the journal.
+	_, err = cvg.getVolumeGroupAttributes(ctx)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
 // generateVolumeGroupFromMapping checks the clusterID and poolID mapping and
 // generates commonVolumeGroup structure for the mapped clusterID and poolID.
+// If the mapping is not found, it returns ErrGroupNotFound.
 func (cvg *commonVolumeGroup) generateVolumeGroupFromMapping(
 	ctx context.Context,
 	csiID util.CSIIdentifier,
 	mapping *[]util.ClusterMappingInfo,
 ) error {
+	var volumeGroupGenerationError error
+
 	mcsiID := csiID
 	existingClusterID := csiID.ClusterID
 	existingPoolID := strconv.FormatInt(csiID.LocationID, 10)
@@ -125,18 +135,18 @@ func (cvg *commonVolumeGroup) generateVolumeGroupFromMapping(
 						return err
 					}
 					mcsiID.LocationID = mPID
-					err = cvg.generateVolumeGroup(mcsiID)
-					if util.ShouldRetryVolumeGeneration(err) {
-						continue
+					volumeGroupGenerationError = cvg.generateVolumeGroup(ctx, mcsiID)
+					if !ShouldRetryVolumeGroupGeneration(volumeGroupGenerationError) {
+						return volumeGroupGenerationError
 					}
 
-					return err
+					log.DebugLog(ctx, "volume group not found for poolID mapping %s: %v", cvg.id, mappedPoolID)
 				}
 			}
 		}
 	}
 
-	return util.ErrPoolNotFound
+	return rbderrors.ErrGroupNotFound
 }
 
 func (cvg *commonVolumeGroup) initCommonVolumeGroup(
@@ -145,6 +155,7 @@ func (cvg *commonVolumeGroup) initCommonVolumeGroup(
 	csiDriver string,
 	creds *util.Credentials,
 ) error {
+	var volumeGroupGenerationError error
 	csiID := util.CSIIdentifier{}
 
 	err := csiID.DecomposeCSIID(id)
@@ -159,15 +170,15 @@ func (cvg *commonVolumeGroup) initCommonVolumeGroup(
 	cvg.objectUUID = csiID.ObjectUUID
 	// cvg.monitors, cvg.namespace, cvg.pool are set in generateVolumeGroup
 
-	err = cvg.generateVolumeGroup(csiID)
+	volumeGroupGenerationError = cvg.generateVolumeGroup(ctx, csiID)
 	// If the error is not a retryable error, return from here.
-	if err != nil && !util.ShouldRetryVolumeGeneration(err) {
-		return err
+	if volumeGroupGenerationError != nil && !ShouldRetryVolumeGroupGeneration(volumeGroupGenerationError) {
+		return volumeGroupGenerationError
 	}
 
-	// If the error is a retryable error, we should try to get the cluster mapping
-	// and generate the volume group from the mapping.
-	if util.ShouldRetryVolumeGeneration(err) {
+	// If Volume Group doesn't exists or the error is a retryable error,
+	// we should try to get the cluster mapping and generate the volume group from the mapping.
+	if ShouldRetryVolumeGroupGeneration(volumeGroupGenerationError) {
 		mapping, err := util.GetClusterMappingInfo(csiID.ClusterID)
 		if err != nil {
 			return err
@@ -229,7 +240,7 @@ func (cvg *commonVolumeGroup) getVolumeGroupAttributes(ctx context.Context) (*jo
 	if attrs.GroupName == "" {
 		log.ErrorLog(ctx, "volume group with id %v not found", cvg.id)
 
-		return nil, ErrRBDGroupNotFound
+		return nil, rbderrors.ErrGroupNotFound
 	}
 
 	cvg.requestName = attrs.RequestName
@@ -356,12 +367,12 @@ func (cvg *commonVolumeGroup) GetIOContext(ctx context.Context) (*rados.IOContex
 
 	conn, err := cvg.getConnection(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to connect: %w", ErrRBDGroupNotConnected, err)
+		return nil, fmt.Errorf("%w: failed to connect: %w", rbderrors.ErrGroupNotConnected, err)
 	}
 
 	ioctx, err := conn.GetIoctx(cvg.pool)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to get IOContext: %w", ErrRBDGroupNotConnected, err)
+		return nil, fmt.Errorf("%w: failed to get IOContext: %w", rbderrors.ErrGroupNotConnected, err)
 	}
 
 	if cvg.namespace != "" {
@@ -416,4 +427,29 @@ func (cvg *commonVolumeGroup) GetCreationTime(ctx context.Context) (*time.Time, 
 	}
 
 	return cvg.creationTime, nil
+}
+
+// ShouldRetryVolumeGroupGeneration determines whether the process of finding or generating
+// volumegroups should continue based on the type of error encountered.
+//
+// It checks if the given error matches any of the following known errors:
+//   - ErrPoolNotFound: The rbd pool where the volumegroup/omap is expected doesn't exist.
+//   - ErrGroupNotFound: The volumegroup doesn't exist in the rbd pool.
+//   - rados.ErrPermissionDenied: Permissions to access the pool is denied.
+//
+// If any of these errors are encountered, the function returns `true`, indicating
+// that the volumegroup search should continue because of known error. Otherwise, it
+// returns `false`, meaning the search should stop.
+//
+// This helper function is used in scenarios where multiple attempts may be made
+// to retrieve or generate volumegroup information, and we want to gracefully handle
+// specific failure cases while retrying for others.
+func ShouldRetryVolumeGroupGeneration(err error) bool {
+	if err == nil {
+		return false // No error, do not retry
+	}
+	// Continue searching for specific known errors
+	return (errors.Is(err, util.ErrPoolNotFound) ||
+		errors.Is(err, rbderrors.ErrGroupNotFound) ||
+		errors.Is(err, rados.ErrPermissionDenied))
 }

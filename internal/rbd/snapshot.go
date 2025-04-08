@@ -24,15 +24,20 @@ import (
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	rbderrors "github.com/ceph/ceph-csi/internal/rbd/errors"
 	"github.com/ceph/ceph-csi/internal/rbd/types"
 	"github.com/ceph/ceph-csi/internal/util"
 	"github.com/ceph/ceph-csi/internal/util/log"
 )
 
+// createRBDClone creates a clone of the parentVol by creating a
+// snapshot of the parentVol and cloning the snapshot to the cloneRbdVol.
+// If deleteSnap is true, the snapshot is deleted after the clone is created.
 func createRBDClone(
 	ctx context.Context,
 	parentVol, cloneRbdVol *rbdVolume,
 	snap *rbdSnapshot,
+	deleteSnap bool,
 ) error {
 	// create snapshot
 	err := parentVol.createSnapshot(ctx, snap)
@@ -58,6 +63,10 @@ func createRBDClone(
 			snap.RbdSnapName,
 			err)
 	}
+	if !deleteSnap {
+		return nil
+	}
+
 	errSnap := parentVol.deleteSnapshot(ctx, snap)
 	if errSnap != nil {
 		log.ErrorLog(ctx, "failed to delete snapshot: %v", errSnap)
@@ -82,7 +91,7 @@ func cleanUpSnapshot(
 ) error {
 	err := parentVol.deleteSnapshot(ctx, rbdSnap)
 	if err != nil {
-		if !errors.Is(err, util.ErrImageNotFound) && !errors.Is(err, ErrSnapNotFound) {
+		if !errors.Is(err, rbderrors.ErrImageNotFound) && !errors.Is(err, rbderrors.ErrSnapNotFound) {
 			log.ErrorLog(ctx, "failed to delete snapshot %q: %v", rbdSnap, err)
 
 			return err
@@ -92,7 +101,7 @@ func cleanUpSnapshot(
 	if rbdVol != nil {
 		err := rbdVol.Delete(ctx)
 		if err != nil {
-			if !errors.Is(err, util.ErrImageNotFound) {
+			if !errors.Is(err, rbderrors.ErrImageNotFound) {
 				log.ErrorLog(ctx, "failed to delete rbd image %q with error: %v", rbdVol, err)
 
 				return err

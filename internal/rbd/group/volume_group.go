@@ -22,19 +22,14 @@ import (
 	"fmt"
 
 	"github.com/ceph/go-ceph/rados"
-	librados "github.com/ceph/go-ceph/rados"
 	librbd "github.com/ceph/go-ceph/rbd"
 	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/csi-addons/spec/lib/go/volumegroup"
 
+	rbderrors "github.com/ceph/ceph-csi/internal/rbd/errors"
 	"github.com/ceph/ceph-csi/internal/rbd/types"
 	"github.com/ceph/ceph-csi/internal/util"
 	"github.com/ceph/ceph-csi/internal/util/log"
-)
-
-var (
-	ErrRBDGroupNotConnected = fmt.Errorf("%w: RBD group is not connected", librados.ErrNotConnected)
-	ErrRBDGroupNotFound     = fmt.Errorf("%w: RBD group not found", librbd.ErrNotFound)
 )
 
 // volumeGroup handles all requests for 'rbd group' operations.
@@ -77,7 +72,7 @@ func GetVolumeGroup(
 
 	attrs, err := vg.getVolumeGroupAttributes(ctx)
 	if err != nil {
-		if errors.Is(err, ErrRBDGroupNotFound) {
+		if errors.Is(err, rbderrors.ErrGroupNotFound) {
 			log.ErrorLog(ctx, "%v, returning empty volume group %q", vg, err)
 
 			return vg, err
@@ -260,11 +255,10 @@ func (vg *volumeGroup) RemoveVolume(ctx context.Context, vol types.Volume) error
 
 	err := vol.RemoveFromGroup(ctx, vg)
 	if err != nil {
-		if errors.Is(err, librbd.ErrNotExist) {
-			return nil
+		if !errors.Is(err, librbd.ErrNotExist) {
+			return fmt.Errorf("failed to remove volume %q from volume group %q: %w", vol, vg, err)
 		}
-
-		return fmt.Errorf("failed to remove volume %q from volume group %q: %w", vol, vg, err)
+		log.DebugLog(ctx, "volume %q doesn't exist in group", vol)
 	}
 
 	// toRemove contain the ID of the volume that is removed from the group

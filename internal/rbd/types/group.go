@@ -26,10 +26,15 @@ import (
 )
 
 type journalledObject interface {
-	// GetID returns the ID in the backend storage for the object.
+	// GetID returns the CSI-handle formatted ID of the object. The handle
+	// can be parsed to locate an entry in the journal, which points to the
+	// object in the backend storage (see `GetClusterID`, `GetPool`, and
+	// `GetName`).
 	GetID(ctx context.Context) (string, error)
 
-	// GetName returns the name of the object in the backend storage.
+	// GetName returns the name in the backend storage for the object. The
+	// name is used for accessing the object though the Ceph APIs.
+	// RBD-images and RBD-groups exist in the backend with the given name.
 	GetName(ctx context.Context) (string, error)
 
 	// GetPool returns the name of the pool that holds the object.
@@ -37,14 +42,14 @@ type journalledObject interface {
 
 	// GetClusterID returns the ID of the cluster of the object.
 	GetClusterID(ctx context.Context) (string, error)
+
+	// Destroy frees the resources used by the object.
+	Destroy(ctx context.Context)
 }
 
 // VolumeGroup contains a number of volumes.
 type VolumeGroup interface {
 	journalledObject
-
-	// Destroy frees the resources used by the VolumeGroup.
-	Destroy(ctx context.Context)
 
 	// GetIOContext returns the IOContext for performing librbd operations
 	// on the VolumeGroup. This is used by the rbdVolume struct when it
