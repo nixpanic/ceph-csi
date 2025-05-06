@@ -17,7 +17,10 @@ package rbd
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	rbderrors "github.com/ceph/ceph-csi/internal/rbd/errors"
@@ -64,82 +67,99 @@ func (rv *rbdVolume) HandleParentImageExistence(
 	if err != nil {
 		return fmt.Errorf("failed to get parent of image %s: %w", rv, err)
 	}
-	parentMirroringInfo, err := parent.GetMirroringInfo(ctx)
+
+	pm, err := parent.ToMirror()
+	if err != nil {
+		return fmt.Errorf("failed to convert parent image %s to mirror type: %w", parent, err)
+	}
+
+	parentMirroringInfo, err := pm.GetMirroringInfo(ctx)
 	if err != nil {
 		return fmt.Errorf(
 			"failed to get mirroring info of parent %q of image %q: %w",
-			parent, rv, err)
+			pm, rv, err)
 	}
 	if parentMirroringInfo.GetState() != librbd.MirrorImageEnabled.String() {
 		return fmt.Errorf("%w: failed to enable mirroring on image %q: "+
 			"parent image %q is not enabled for mirroring",
-			rbderrors.ErrFailedPrecondition, rv, parent)
+			rbderrors.ErrFailedPrecondition, rv, pm)
 	}
 
 	return nil
 }
 
+// rbdMirror is an extended rbdImage type that implements the types.Mirror interface.
+type rbdMirror struct {
+	rbdImage
+}
+
 // check that rbdVolume implements the types.Mirror interface.
-var _ types.Mirror = &rbdVolume{}
+var _ types.Mirror = &rbdMirror{}
+
+func (ri *rbdImage) ToMirror() (types.Mirror, error) {
+	return &rbdMirror{
+		rbdImage: *ri,
+	}, nil
+}
 
 // EnableMirroring enables mirroring on an image.
-func (ri *rbdImage) EnableMirroring(_ context.Context, mode librbd.ImageMirrorMode) error {
-	image, err := ri.open()
+func (rm *rbdMirror) EnableMirroring(_ context.Context, mode librbd.ImageMirrorMode) error {
+	image, err := rm.open()
 	if err != nil {
-		return fmt.Errorf("failed to open image %q with error: %w", ri, err)
+		return fmt.Errorf("failed to open image %q with error: %w", rm, err)
 	}
 	defer image.Close()
 
 	err = image.MirrorEnable(mode)
 	if err != nil {
-		return fmt.Errorf("failed to enable mirroring on %q with error: %w", ri, err)
+		return fmt.Errorf("failed to enable mirroring on %q with error: %w", rm, err)
 	}
 
 	return nil
 }
 
 // DisableMirroring disables mirroring on an image.
-func (ri *rbdImage) DisableMirroring(_ context.Context, force bool) error {
-	image, err := ri.open()
+func (rm *rbdMirror) DisableMirroring(_ context.Context, force bool) error {
+	image, err := rm.open()
 	if err != nil {
-		return fmt.Errorf("failed to open image %q with error: %w", ri, err)
+		return fmt.Errorf("failed to open image %q with error: %w", rm, err)
 	}
 	defer image.Close()
 
 	err = image.MirrorDisable(force)
 	if err != nil {
-		return fmt.Errorf("failed to disable mirroring on %q with error: %w", ri, err)
+		return fmt.Errorf("failed to disable mirroring on %q with error: %w", rm, err)
 	}
 
 	return nil
 }
 
 // GetMirroringInfo gets mirroring information of an image.
-func (ri *rbdImage) GetMirroringInfo(_ context.Context) (types.MirrorInfo, error) {
-	image, err := ri.open()
+func (rm *rbdMirror) GetMirroringInfo(_ context.Context) (types.MirrorInfo, error) {
+	image, err := rm.open()
 	if err != nil {
-		return nil, fmt.Errorf("failed to open image %q with error: %w", ri, err)
+		return nil, fmt.Errorf("failed to open image %q with error: %w", rm, err)
 	}
 	defer image.Close()
 
 	info, err := image.GetMirrorImageInfo()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get mirroring info of %q with error: %w", ri, err)
+		return nil, fmt.Errorf("failed to get mirroring info of %q with error: %w", rm, err)
 	}
 
 	return ImageStatus{MirrorImageInfo: info}, nil
 }
 
 // Promote promotes image to primary.
-func (ri *rbdImage) Promote(_ context.Context, force bool) error {
-	image, err := ri.open()
+func (rm *rbdMirror) Promote(_ context.Context, force bool) error {
+	image, err := rm.open()
 	if err != nil {
-		return fmt.Errorf("failed to open image %q with error: %w", ri, err)
+		return fmt.Errorf("failed to open image %q with error: %w", rm, err)
 	}
 	defer image.Close()
 	err = image.MirrorPromote(force)
 	if err != nil {
-		return fmt.Errorf("failed to promote image %q with error: %w", ri, err)
+		return fmt.Errorf("failed to promote image %q with error: %w", rm, err)
 	}
 
 	return nil
@@ -148,13 +168,13 @@ func (ri *rbdImage) Promote(_ context.Context, force bool) error {
 // ForcePromote promotes image to primary with force option with 2 minutes
 // timeout. If there is no response within 2 minutes,the rbd CLI process will be
 // killed and an error is returned.
-func (rv *rbdVolume) ForcePromote(ctx context.Context, cr *util.Credentials) error {
+func (rm *rbdMirror) ForcePromote(ctx context.Context, cr *util.Credentials) error {
 	promoteArgs := []string{
 		"mirror", "image", "promote",
-		rv.String(),
+		rm.String(),
 		"--force",
 		"--id", cr.ID,
-		"-m", rv.Monitors,
+		"-m", rm.Monitors,
 		"--keyfile=" + cr.KeyFile,
 	}
 	_, stderr, err := util.ExecCommandWithTimeout(
@@ -165,41 +185,82 @@ func (rv *rbdVolume) ForcePromote(ctx context.Context, cr *util.Credentials) err
 		promoteArgs...,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to promote image %q with error: %w", rv, err)
+		return fmt.Errorf("failed to promote image %q with error: %w", rm, err)
 	}
 
 	if stderr != "" {
-		return fmt.Errorf("failed to promote image %q with stderror: %s", rv, stderr)
+		return fmt.Errorf("failed to promote image %q with stderror: %s", rm, stderr)
 	}
 
 	return nil
 }
 
 // Demote demotes image to secondary.
-func (ri *rbdImage) Demote(_ context.Context) error {
-	image, err := ri.open()
+func (rm *rbdMirror) Demote(_ context.Context) error {
+	image, err := rm.open()
 	if err != nil {
-		return fmt.Errorf("failed to open image %q with error: %w", ri, err)
+		return fmt.Errorf("failed to open image %q with error: %w", rm, err)
 	}
 	defer image.Close()
 	err = image.MirrorDemote()
 	if err != nil {
-		return fmt.Errorf("failed to demote image %q with error: %w", ri, err)
+		return fmt.Errorf("failed to demote image %q with error: %w", rm, err)
 	}
 
 	return nil
 }
 
-// Resync resync image to correct the split-brain.
-func (ri *rbdImage) Resync(_ context.Context) error {
-	image, err := ri.open()
+// Resync resync image to correct the split-brain. It may take some time for
+// the RBD-mirror daemon to start syncing the image. After the resync operation
+// is executed, the status of the resync is checked with a small delay to
+// prevent subsequent resync calls from re-starting the resync quickly after
+// each other.
+func (rm *rbdMirror) Resync(ctx context.Context) error {
+	image, err := rm.open()
 	if err != nil {
-		return fmt.Errorf("failed to open image %q with error: %w", ri, err)
+		return fmt.Errorf("failed to open image %q with error: %w", rm, err)
 	}
 	defer image.Close()
 	err = image.MirrorResync()
 	if err != nil {
-		return fmt.Errorf("failed to resync image %q with error: %w", ri, err)
+		return fmt.Errorf("failed to resync image %q with error: %w", rm, err)
+	}
+
+	// delay until the state is syncing, or until 1+2+4+8+16 seconds passed
+	delay := 1 * time.Second
+	for {
+		time.Sleep(delay)
+
+		sts, dErr := rm.GetGlobalMirroringStatus(ctx)
+		if dErr != nil {
+			// the image gets recreated after issuing resync
+			if errors.Is(dErr, rbderrors.ErrImageNotFound) {
+				continue
+			}
+			log.ErrorLog(ctx, dErr.Error())
+
+			return dErr
+		}
+
+		localStatus, dErr := sts.GetLocalSiteStatus()
+		if dErr != nil {
+			log.ErrorLog(ctx, dErr.Error())
+
+			return fmt.Errorf("failed to get local status: %w", dErr)
+		}
+
+		syncInfo, dErr := localStatus.GetLastSyncInfo(ctx)
+		if dErr != nil {
+			return fmt.Errorf("failed to get last sync info: %w", dErr)
+		}
+		if syncInfo.IsSyncing() {
+			return nil
+		}
+
+		delay = 2 * delay
+		if delay > 30 {
+			break
+		}
 	}
 
 	// If we issued a resync, return a non-final error as image needs to be recreated
@@ -209,15 +270,15 @@ func (ri *rbdImage) Resync(_ context.Context) error {
 }
 
 // GetGlobalMirroringStatus get the mirroring status of an image.
-func (ri *rbdImage) GetGlobalMirroringStatus(_ context.Context) (types.GlobalStatus, error) {
-	image, err := ri.open()
+func (rm *rbdMirror) GetGlobalMirroringStatus(_ context.Context) (types.GlobalStatus, error) {
+	image, err := rm.open()
 	if err != nil {
-		return nil, fmt.Errorf("failed to open image %q with error: %w", ri, err)
+		return nil, fmt.Errorf("failed to open image %q with error: %w", rm, err)
 	}
 	defer image.Close()
 	statusInfo, err := image.GetGlobalMirrorStatus()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get image mirroring status %q with error: %w", ri, err)
+		return nil, fmt.Errorf("failed to get image mirroring status %q with error: %w", rm, err)
 	}
 
 	return GlobalMirrorStatus{GlobalMirrorImageStatus: statusInfo}, nil
@@ -326,4 +387,88 @@ func (status SiteMirrorImageStatus) IsUP() bool {
 func (status SiteMirrorImageStatus) GetLastUpdate() time.Time {
 	// convert the last update time to UTC
 	return time.Unix(status.LastUpdate, 0).UTC()
+}
+
+func (status SiteMirrorImageStatus) GetLastSyncInfo(ctx context.Context) (types.SyncInfo, error) {
+	return newSyncInfo(ctx, status.Description)
+}
+
+type syncInfo struct {
+	LocalSnapshotTime    int64       `json:"local_snapshot_timestamp"`
+	LastSnapshotBytes    int64       `json:"last_snapshot_bytes"`
+	LastSnapshotDuration *int64      `json:"last_snapshot_sync_seconds"`
+	ReplayState          replayState `json:"replay_state"`
+}
+
+type replayState string
+
+const (
+	idle    replayState = "idle"
+	syncing replayState = "syncing"
+)
+
+// Type assertion for ensuring an implementation of the full SyncInfo interface.
+var _ types.SyncInfo = &syncInfo{}
+
+func newSyncInfo(ctx context.Context, description string) (types.SyncInfo, error) {
+	// Format of the description will be as followed:
+	// description = `replaying, {"bytes_per_second":0.0,"bytes_per_snapshot":81920.0,
+	// "last_snapshot_bytes":81920,"last_snapshot_sync_seconds":0,
+	// "local_snapshot_timestamp":1684675261,
+	// "remote_snapshot_timestamp":1684675261,"replay_state":"idle"}`
+	// In case there is no last snapshot bytes returns 0 as the
+	// LastSyncBytes is optional.
+	// In case there is no last snapshot sync seconds, it returns nil as the
+	// LastSyncDuration is optional.
+	// In case there is no local snapshot timestamp return an error as the
+	// LastSyncTime is required.
+
+	if description == "" {
+		return nil, fmt.Errorf("empty description: %w", rbderrors.ErrLastSyncTimeNotFound)
+	}
+	log.DebugLog(ctx, "description: %s", description)
+	splittedString := strings.SplitN(description, ",", 2)
+	if len(splittedString) == 1 {
+		return nil, fmt.Errorf("no snapshot details: %w", rbderrors.ErrLastSyncTimeNotFound)
+	}
+
+	var localSnapInfo syncInfo
+	err := json.Unmarshal([]byte(splittedString[1]), &localSnapInfo)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal description %q into syncInfo: %w", description, err)
+	}
+
+	// If the json unmarsal is successful but the local snapshot time is 0, we
+	// need to consider it as an error as the LastSyncTime is required.
+	if localSnapInfo.LocalSnapshotTime == 0 {
+		return nil, fmt.Errorf("empty local snapshot timestamp: %w", rbderrors.ErrLastSyncTimeNotFound)
+	}
+
+	return &localSnapInfo, nil
+}
+
+func (si *syncInfo) GetLastSyncTime() time.Time {
+	// converts localSnapshotTime of type int64 to time.Time
+	return time.Unix(si.LocalSnapshotTime, 0)
+}
+
+func (si *syncInfo) GetLastSyncBytes() int64 {
+	return si.LastSnapshotBytes
+}
+
+func (si *syncInfo) GetLastSyncDuration() *time.Duration {
+	var duration time.Duration
+
+	if si.LastSnapshotDuration == nil {
+		duration = time.Duration(0)
+	} else {
+		// time.Duration is in nanoseconds
+		duration = time.Duration(*si.LastSnapshotDuration) * time.Second
+	}
+
+	return &duration
+}
+
+func (si *syncInfo) IsSyncing() bool {
+	return si.ReplayState == syncing
 }
