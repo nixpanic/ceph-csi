@@ -19,6 +19,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net/netip"
 	"os"
 	"runtime"
 	"time"
@@ -219,11 +220,17 @@ func main() {
 
 	if conf.EnableProfiling || conf.Vtype == livenessType {
 		// validate metrics endpoint
-		conf.MetricsIP = os.Getenv("POD_IP")
-
-		if conf.MetricsIP == "" {
+		podIP := os.Getenv("POD_IP")
+		if podIP == "" {
 			klog.Warning("missing POD_IP env var defaulting to 0.0.0.0")
 			conf.MetricsIP = "0.0.0.0"
+		} else {
+			addr := netip.MustParseAddr(podIP)
+			metricsIP := addr.String()
+			if addr.Is6() {
+				metricsIP = "[" + metricsIP + "]"
+			}
+			conf.MetricsIP = metricsIP
 		}
 		err = util.ValidateURL(&conf)
 		if err != nil {
