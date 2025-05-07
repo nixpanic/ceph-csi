@@ -17,7 +17,6 @@ limitations under the License.
 package kms
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -93,7 +92,7 @@ func TestWorkflowSecretsMetadataKMS(t *testing.T) {
 	// plainDEK is the (LUKS) passphrase for the volume
 	plainDEK := "usually created with generateNewEncryptionPassphrase()"
 
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	// with missing encryptionPassphraseKey, encrypting should fail
 	_, err = kms.EncryptDEK(ctx, volumeID, plainDEK)
@@ -114,19 +113,19 @@ func TestWorkflowSecretsMetadataKMS(t *testing.T) {
 
 	encryptedDEK, err := kms.EncryptDEK(ctx, volumeID, plainDEK)
 	require.NoError(t, err)
-	require.NotEqual(t, "", encryptedDEK)
+	require.NotEmpty(t, encryptedDEK)
 	require.NotEqual(t, plainDEK, encryptedDEK)
 
 	// with an incorrect volumeID, decrypting should fail
 	decryptedDEK, err := kms.DecryptDEK(ctx, "incorrect-volumeID", encryptedDEK)
 	require.Error(t, err)
-	require.Equal(t, "", decryptedDEK)
+	require.Empty(t, decryptedDEK)
 	require.NotEqual(t, plainDEK, decryptedDEK)
 
 	// with the right volumeID, decrypting should return the plainDEK
 	decryptedDEK, err = kms.DecryptDEK(ctx, volumeID, encryptedDEK)
 	require.NoError(t, err)
-	require.NotEqual(t, "", decryptedDEK)
+	require.NotEmpty(t, decryptedDEK)
 	require.Equal(t, plainDEK, decryptedDEK)
 }
 

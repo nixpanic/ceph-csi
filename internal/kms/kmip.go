@@ -185,7 +185,7 @@ func (kms *kmipKMS) EncryptDEK(ctx context.Context, _, plainDEK string) (string,
 	if err != nil {
 		return "", err
 	}
-	defer conn.Close()
+	defer conn.Close() //nolint:errcheck // more important errors are returned
 
 	emd := encryptedMetedataDEK{}
 	emd.Nonce, err = generateNonce(nonceSize)
@@ -241,7 +241,7 @@ func (kms *kmipKMS) DecryptDEK(ctx context.Context, _, encryptedDEK string) (str
 	if err != nil {
 		return "", err
 	}
-	defer conn.Close()
+	defer conn.Close() //nolint:errcheck // more important errors are returned
 
 	emd := encryptedMetedataDEK{}
 	err = json.Unmarshal([]byte(encryptedDEK), &emd)
@@ -293,6 +293,10 @@ func (kms *kmipKMS) RequiresDEKStore() DEKStoreType {
 	return DEKStoreMetadata
 }
 
+func (kms *kmipKMS) GetSecret(ctx context.Context, volumeID string) (string, error) {
+	return "", ErrGetSecretUnsupported
+}
+
 // getSecrets returns required options from the Kubernetes Secret.
 func (kms *kmipKMS) getSecrets() (map[string]string, error) {
 	c, err := k8s.NewK8sClient()
@@ -342,7 +346,7 @@ func (kms *kmipKMS) connect() (*tls.Conn, error) {
 	}
 	defer func() {
 		if err != nil {
-			conn.Close()
+			conn.Close() //nolint:errcheck,gosec // more important failures are returned
 		}
 	}()
 
@@ -498,10 +502,6 @@ func (kms *kmipKMS) verifyResponse(
 	}
 
 	return &batchItem, nil
-}
-
-func (kms *kmipKMS) GetSecret(ctx context.Context, volumeID string) (string, error) {
-	return "", ErrGetSecretUnsupported
 }
 
 // TODO: use the following structs from https://github.com/gemalto/kmip-go

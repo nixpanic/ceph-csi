@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+//nolint:funcorder // reordering causes a lot of churn in this file, needs cleanups
 package cephfs
 
 import (
@@ -432,13 +433,14 @@ func getBackingSnapshotRoot(
 
 	snapshotsBase := path.Join(stagingTargetPath, ".snap")
 
+	//nolint:gosec // intended use of a variable for the path
 	dir, err := os.Open(snapshotsBase)
 	if err != nil {
 		log.ErrorLog(ctx, "failed to open %s when searching for snapshot root: %v", snapshotsBase, err)
 
 		return "", status.Error(codes.Internal, err.Error())
 	}
-	defer dir.Close()
+	defer dir.Close() //nolint:errcheck // other more important errors are returned
 
 	// Read the contents of <root path>/.snap directory into a string slice.
 

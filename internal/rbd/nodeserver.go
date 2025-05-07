@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+//nolint:funcorder // reordering causes a lot of churn in this file, needs cleanups
 package rbd
 
 import (
@@ -1330,7 +1331,7 @@ func (ns *NodeServer) ext4SupportsPrezeroed() bool {
 
 		return false
 	}
-	defer os.Remove(tempImgFile.Name())
+	defer os.Remove(tempImgFile.Name()) //nolint:errcheck // failed to remove temp file :-(
 
 	if err = file.CreateSparseFile(tempImgFile, 1); err != nil {
 		log.WarningLog(ctx, "failed to create sparse file: %v", err)

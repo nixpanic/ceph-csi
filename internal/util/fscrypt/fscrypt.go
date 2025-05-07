@@ -60,7 +60,7 @@ var policyV2Support = []kernel.KernelVersion{
 	},
 }
 
-// error values
+// Error values.
 var (
 	ErrBadAuth = errors.New("key authentication check failed")
 )
@@ -135,7 +135,7 @@ func fsyncEncryptedDirectory(dirPath string) error {
 	if err != nil {
 		return err
 	}
-	defer dir.Close()
+	defer dir.Close() //nolint:errcheck // still open? sync may have returned an error too
 
 	return dir.Sync()
 }
@@ -278,13 +278,13 @@ func initializeAndUnlock(
 	return nil
 }
 
-// getInodeEncryptedAttribute returns the inode's encrypt attribute similar to lsattr(1)
+// getInodeEncryptedAttribute returns the inode's encrypt attribute similar to lsattr(1).
 func getInodeEncryptedAttribute(p string) (bool, error) {
 	file, err := os.Open(p)
 	if err != nil {
 		return false, err
 	}
-	defer file.Close()
+	defer file.Close() //nolint:errcheck // failed to close, assume SYS_IOCTL returned an error too
 
 	var attr int
 	_, _, errno := unix.Syscall(unix.SYS_IOCTL, file.Fd(), unix.FS_IOC_GETFLAGS,

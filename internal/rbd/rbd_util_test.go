@@ -17,7 +17,6 @@ limitations under the License.
 package rbd
 
 import (
-	"context"
 	"errors"
 	"os"
 	"strings"
@@ -249,7 +248,7 @@ func TestGetCephClientLogFileName(t *testing.T) {
 
 func TestStrategicActionOnLogFile(t *testing.T) {
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := t.Context()
 	tmpDir := t.TempDir()
 
 	var logFile [3]string
@@ -303,7 +302,6 @@ func TestStrategicActionOnLogFile(t *testing.T) {
 				if _, err = os.Stat(newExt); os.IsNotExist(err) {
 					t.Errorf("compressed logFile (%s) not found: %v", newExt, err)
 				}
-				os.Remove(newExt)
 			case "remove":
 				if _, err = os.Stat(tt.args.logFile); !os.IsNotExist(err) {
 					t.Errorf("logFile (%s) not removed: %v", tt.args.logFile, err)
@@ -312,7 +310,6 @@ func TestStrategicActionOnLogFile(t *testing.T) {
 				if _, err = os.Stat(tt.args.logFile); os.IsNotExist(err) {
 					t.Errorf("logFile (%s) not preserved: %v", tt.args.logFile, err)
 				}
-				os.Remove(tt.args.logFile)
 			}
 		})
 	}
@@ -320,7 +317,7 @@ func TestStrategicActionOnLogFile(t *testing.T) {
 
 func TestIsKrbdFeatureSupported(t *testing.T) {
 	t.Parallel()
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	tests := []struct {
 		name        string
