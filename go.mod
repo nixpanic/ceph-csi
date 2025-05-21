@@ -8,7 +8,7 @@ toolchain go1.24.2
 replace github.com/ceph/ceph-csi/api => ./api
 
 require (
-	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.9.0
+	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.10.0
 	github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets v1.3.1
 	github.com/IBM/keyprotect-go-client v0.15.1
 	github.com/aws/aws-sdk-go v1.55.7
@@ -33,13 +33,13 @@ require (
 	golang.org/x/crypto v0.38.0
 	golang.org/x/net v0.40.0
 	golang.org/x/sys v0.33.0
-	google.golang.org/grpc v1.72.0
+	google.golang.org/grpc v1.72.1
 	google.golang.org/protobuf v1.36.6
 	k8s.io/api v0.33.0
 	k8s.io/apimachinery v0.33.0
 	k8s.io/cloud-provider v0.33.0
 	k8s.io/klog/v2 v2.130.1
-	k8s.io/kubernetes v1.33.0
+	k8s.io/kubernetes v1.33.1
 	k8s.io/mount-utils v0.33.0
 	k8s.io/utils v0.0.0-20241210054802-24370beab758
 )
