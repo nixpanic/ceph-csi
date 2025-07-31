@@ -31,6 +31,7 @@ func (d *Driver) Run(conf *util.Config) {
 	rbd.SetGlobalInt("minSnapshotsOnImageToStartFlatten", conf.MinSnapshotsOnImage)
 	// Create instances of the volume and snapshot journal
 	rbd.InitJournals(conf.InstanceID)
+
 	// Initialize CSI driver
 	cd := csicommon.NewCSIDriver(conf.DriverName, util.DriverVersion, conf.NodeID, conf.InstanceID, conf.EnableFencing)
 	if cd == nil {
@@ -65,11 +66,7 @@ func (d *Driver) Run(conf *util.Config) {
 
 	switch {
 	case conf.IsNodeServer:
-		ns, err := nodeserver.NewNodeServer(cd, conf.NodeID, conf.Vtype)
-		if err != nil {
-			log.FatalLogMsg("failed to initialize node server: %v", err)
-		}
-		srv.NS = ns
+		srv.NS = nodeserver.NewNodeServer(cd, conf.NodeID, conf.Vtype)
 	case conf.IsControllerServer:
 		cs, err := controller.NewControllerServer(cd)
 		if err != nil {
@@ -77,11 +74,7 @@ func (d *Driver) Run(conf *util.Config) {
 		}
 		srv.CS = cs
 	default:
-		ns, err := nodeserver.NewNodeServer(cd, conf.NodeID, conf.Vtype)
-		if err != nil {
-			log.FatalLogMsg("failed to initialize node server: %v", err)
-		}
-		srv.NS = ns
+		srv.NS = nodeserver.NewNodeServer(cd, conf.NodeID, conf.Vtype)
 		cs, err := controller.NewControllerServer(cd)
 		if err != nil {
 			log.FatalLogMsg("failed to initialize controller server: %v", err)
