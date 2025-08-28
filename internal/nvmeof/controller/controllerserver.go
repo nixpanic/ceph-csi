@@ -31,11 +31,16 @@ import (
 	"github.com/ceph/ceph-csi/internal/rbd"
 	rbdutil "github.com/ceph/ceph-csi/internal/rbd"
 	rbddriver "github.com/ceph/ceph-csi/internal/rbd/driver"
+	"github.com/ceph/ceph-csi/internal/util"
 	"github.com/ceph/ceph-csi/internal/util/log"
 )
 
 type Server struct {
 	csi.UnimplementedControllerServer
+
+	// A map storing all volumes with ongoing operations so that additional operations
+	// for that same volume (as defined by VolumeID/volume name) return an Aborted error
+	volumeLocks *util.VolumeLocks
 
 	// backendServer handles the RBD requests
 	backendServer *rbd.ControllerServer
@@ -44,6 +49,7 @@ type Server struct {
 // NewControllerServer initialize a controller server for nvmeof CSI driver.
 func NewControllerServer(d *csicommon.CSIDriver) (*Server, error) {
 	return &Server{
+		volumeLocks:   util.NewVolumeLocks(),
 		backendServer: rbddriver.NewControllerServer(d),
 	}, nil
 }
@@ -79,6 +85,14 @@ func (cs *Server) CreateVolume(
 	if err := validateCreateVolumeRequest(req); err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "request validation failed: %v", err)
 	}
+
+	// prevent concurrent requests for the same volume
+	if acquired := cs.volumeLocks.TryAcquire(req.GetName()); !acquired {
+		log.ErrorLog(ctx, util.VolumeOperationAlreadyExistsFmt, req.GetName())
+
+		return nil, status.Errorf(codes.Aborted, util.VolumeOperationAlreadyExistsFmt, req.GetName())
+	}
+	defer cs.volumeLocks.Release(req.GetName())
 
 	// Step 1: Create RBD volume through backend. if exists, it is ok.
 	res, err := cs.backendServer.CreateVolume(ctx, req)
@@ -122,6 +136,15 @@ func (cs *Server) DeleteVolume(
 	if volumeID == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "empty volume ID in request")
 	}
+
+	// prevent concurrent requests for the same volume
+	if acquired := cs.volumeLocks.TryAcquire(volumeID); !acquired {
+		log.ErrorLog(ctx, util.VolumeOperationAlreadyExistsFmt, volumeID)
+
+		return nil, status.Errorf(codes.Aborted, util.VolumeOperationAlreadyExistsFmt, volumeID)
+	}
+	defer cs.volumeLocks.Release(volumeID)
+
 	// Get NVMe-oF metadata for cleanup
 	nvmeofData, err := cs.getNVMeoFMetadata(ctx, req, volumeID)
 	if err != nil {
@@ -229,9 +252,10 @@ func createNVMeoFResources(
 		return nil, fmt.Errorf("invalid nvmeofGatewayPort %s: %w", nvmeofGatewayPortStr, err)
 	}
 	nvmeofData := &nvmeof.NVMeoFVolumeData{
-		SubsystemNQN: params["subsystemNQN"],
-		NamespaceID:  0, // will be set after namespace creation
-		HostNQN:      params["hostNQN"],
+		SubsystemNQN:  params["subsystemNQN"],
+		NamespaceID:   0,  // will be set after namespace creation,
+		NamespaceUUID: "", // will be set after namespace creation
+		HostNQN:       params["hostNQN"],
 		ListenerInfo: nvmeof.ListenerDetails{
 			GatewayAddress: nvmeof.GatewayAddress{
 				Address: params["listenerIpAddress"],
@@ -265,7 +289,15 @@ func createNVMeoFResources(
 		return nil, fmt.Errorf("subsystem setup failed: %w", err)
 	}
 
-	// Step 4: Create namespace
+	// Step 4: Create listeners
+	err = gateway.CreateListener(ctx, nvmeofData.SubsystemNQN, nvmeofData.ListenerInfo)
+	if err != nil {
+		return nil, fmt.Errorf("listener creation failed: %w", err)
+	}
+	log.DebugLog(ctx, "Listener created for subsystem %s at %s", nvmeofData.SubsystemNQN,
+		nvmeofData.ListenerInfo)
+
+	// Step 5: Create namespace and set its uuid
 	nsid, err := gateway.CreateNamespace(ctx, nvmeofData.SubsystemNQN, rbdPoolName, rbdImageName)
 	if err != nil {
 		return nil, fmt.Errorf("namespace creation failed: %w", err)
@@ -273,13 +305,11 @@ func createNVMeoFResources(
 	log.DebugLog(ctx, "Namespace created: %s/%s with NSID: %d", rbdPoolName, rbdImageName, nsid)
 	nvmeofData.NamespaceID = nsid
 
-	// Step 5: Create listeners
-	err = gateway.CreateListener(ctx, nvmeofData.SubsystemNQN, nvmeofData.ListenerInfo)
+	uuid, err := gateway.GetUUIDBySubsystemAndNameSpaceID(ctx, nvmeofData.SubsystemNQN, nvmeofData.NamespaceID)
 	if err != nil {
-		return nil, fmt.Errorf("listener creation failed: %w", err)
+		return nil, fmt.Errorf("get namespace uuid failed: %w", err)
 	}
-	log.DebugLog(ctx, "Listener created for subsystem %s at %s", nvmeofData.SubsystemNQN,
-		nvmeofData.ListenerInfo)
+	nvmeofData.NamespaceUUID = uuid
 
 	// Step 6: Add host to subsystem
 	if err := gateway.AddHost(ctx, nvmeofData.SubsystemNQN, nvmeofData.HostNQN); err != nil {
@@ -322,20 +352,20 @@ func cleanupNVMeoFResources(
 	}
 	log.DebugLog(ctx, "Host %s removed from subsystem %s", nvmeofData.HostNQN, nvmeofData.SubsystemNQN)
 
-	// Step 3: Delete listener
+	// Step 3: Delete namespace
+	if err := gateway.DeleteNamespace(ctx, nvmeofData.SubsystemNQN, nvmeofData.NamespaceID); err != nil {
+		return fmt.Errorf("failed to delete namespace %d for subsystem %s: %w",
+			nvmeofData.NamespaceID, nvmeofData.SubsystemNQN, err)
+	}
+	log.DebugLog(ctx, "Namespace %d deleted for subsystem %s", nvmeofData.NamespaceID, nvmeofData.SubsystemNQN)
+
+	// Step 4: Delete listener
 	err = gateway.DeleteListener(ctx, nvmeofData.SubsystemNQN, nvmeofData.ListenerInfo)
 	if err != nil {
 		return fmt.Errorf("failed to delete listener for subsystem %s: %w", nvmeofData.SubsystemNQN, err)
 	}
 	log.DebugLog(ctx, "Listener deleted for subsystem %s at %s", nvmeofData.SubsystemNQN,
 		nvmeofData.ListenerInfo)
-
-	// Step 4: Delete namespace
-	if err := gateway.DeleteNamespace(ctx, nvmeofData.SubsystemNQN, nvmeofData.NamespaceID); err != nil {
-		return fmt.Errorf("failed to delete namespace %d for subsystem %s: %w",
-			nvmeofData.NamespaceID, nvmeofData.SubsystemNQN, err)
-	}
-	log.DebugLog(ctx, "Namespace %d deleted for subsystem %s", nvmeofData.NamespaceID, nvmeofData.SubsystemNQN)
 
 	// Step 5: Cleanup empty subsystem
 	if err := cleanupEmptySubsystem(ctx, gateway, nvmeofData.SubsystemNQN); err != nil {
@@ -346,21 +376,28 @@ func cleanupNVMeoFResources(
 	return nil
 }
 
+// VolumeContext metadata keys.
 const (
 	// NVMe-oF resource info.
-	mdSubsystemNQN = ".rbd.nvmeof.SubsystemNQN"
-	mdNamespaceID  = ".rbd.nvmeof.NamespaceID"
-	mdHostNQN      = ".rbd.nvmeof.HostNQN"
+	vcSubsystemNQN  = "SubsystemNQN"
+	vcNamespaceID   = "NamespaceID"
+	vcNamespaceUUID = "NamespaceUUID"
+	vcHostNQN       = "HostNQN"
 
 	// Listener info.
-	mdListenerAddress  = ".rbd.nvmeof.ListenerAddress"
-	mdListenerPort     = ".rbd.nvmeof.ListenerPort"
-	mdListenerHostname = ".rbd.nvmeof.ListenerHostname"
+	vcListenerAddress  = "ListenerAddress"
+	vcListenerPort     = "ListenerPort"
+	vcListenerHostname = "ListenerHostname"
 
 	// Gateway management info.
-	mdGatewayAddress = ".rbd.nvmeof.GatewayAddress"
-	mdGatewayPort    = ".rbd.nvmeof.GatewayPort"
+	vcGatewayAddress = "GatewayAddress"
+	vcGatewayPort    = "GatewayPort"
 )
+
+// toRBDMetadataKey converts clean volume context key to prefixed RBD metadata key.
+func toRBDMetadataKey(vcKey string) string {
+	return ".rbd.nvmeof." + vcKey
+}
 
 // populateVolumeContext adds NVMe-oF information to volume context for NodeServer.
 func populateVolumeContext(volume *csi.Volume, data *nvmeof.NVMeoFVolumeData) {
@@ -370,14 +407,15 @@ func populateVolumeContext(volume *csi.Volume, data *nvmeof.NVMeoFVolumeData) {
 	listenerPortStr := strconv.FormatUint(uint64(data.ListenerInfo.Port), 10)
 	gatewayManagementInfoPortStr := strconv.FormatUint(uint64(data.GatewayManagementInfo.Port), 10)
 
-	volume.VolumeContext[mdSubsystemNQN] = data.SubsystemNQN
-	volume.VolumeContext[mdNamespaceID] = strconv.FormatUint(uint64(data.NamespaceID), 10)
-	volume.VolumeContext[mdHostNQN] = data.HostNQN
-	volume.VolumeContext[mdListenerAddress] = data.ListenerInfo.Address
-	volume.VolumeContext[mdListenerPort] = listenerPortStr
-	volume.VolumeContext[mdListenerHostname] = data.ListenerInfo.Hostname
-	volume.VolumeContext[mdGatewayAddress] = data.GatewayManagementInfo.Address
-	volume.VolumeContext[mdGatewayPort] = gatewayManagementInfoPortStr
+	volume.VolumeContext[vcSubsystemNQN] = data.SubsystemNQN
+	volume.VolumeContext[vcNamespaceID] = strconv.FormatUint(uint64(data.NamespaceID), 10)
+	volume.VolumeContext[vcNamespaceUUID] = data.NamespaceUUID
+	volume.VolumeContext[vcHostNQN] = data.HostNQN
+	volume.VolumeContext[vcListenerAddress] = data.ListenerInfo.Address
+	volume.VolumeContext[vcListenerPort] = listenerPortStr
+	volume.VolumeContext[vcListenerHostname] = data.ListenerInfo.Hostname
+	volume.VolumeContext[vcGatewayAddress] = data.GatewayManagementInfo.Address
+	volume.VolumeContext[vcGatewayPort] = gatewayManagementInfoPortStr
 }
 
 // storeNVMeoFMetadata stores all NVMe-oF data in RBD volume metadata for cleanup operations.
@@ -404,18 +442,19 @@ func (cs *Server) storeNVMeoFMetadata(
 	// Prepare all metadata entries
 	metadata := map[string]string{
 		// NVMe-oF resource info
-		mdSubsystemNQN: nvmeofData.SubsystemNQN,
-		mdNamespaceID:  strconv.FormatUint(uint64(nvmeofData.NamespaceID), 10),
-		mdHostNQN:      nvmeofData.HostNQN,
+		toRBDMetadataKey(vcSubsystemNQN):  nvmeofData.SubsystemNQN,
+		toRBDMetadataKey(vcNamespaceID):   strconv.FormatUint(uint64(nvmeofData.NamespaceID), 10),
+		toRBDMetadataKey(vcNamespaceUUID): nvmeofData.NamespaceUUID,
+		toRBDMetadataKey(vcHostNQN):       nvmeofData.HostNQN,
 
 		// Listener info
-		mdListenerAddress:  nvmeofData.ListenerInfo.Address,
-		mdListenerPort:     listenerInfoPortStr,
-		mdListenerHostname: nvmeofData.ListenerInfo.Hostname,
+		toRBDMetadataKey(vcListenerAddress):  nvmeofData.ListenerInfo.Address,
+		toRBDMetadataKey(vcListenerPort):     listenerInfoPortStr,
+		toRBDMetadataKey(vcListenerHostname): nvmeofData.ListenerInfo.Hostname,
 
 		// Gateway management info
-		mdGatewayAddress: nvmeofData.GatewayManagementInfo.Address,
-		mdGatewayPort:    gatewayManagementInfoPortStr,
+		toRBDMetadataKey(vcGatewayAddress): nvmeofData.GatewayManagementInfo.Address,
+		toRBDMetadataKey(vcGatewayPort):    gatewayManagementInfoPortStr,
 	}
 
 	// Store all metadata entries
@@ -460,14 +499,15 @@ func (cs *Server) getNVMeoFMetadata(
 
 	// Required metadata keys
 	requiredKeys := []string{
-		mdSubsystemNQN,
-		mdNamespaceID,
-		mdHostNQN,
-		mdListenerAddress,
-		mdListenerPort,
-		mdListenerHostname,
-		mdGatewayAddress,
-		mdGatewayPort,
+		toRBDMetadataKey(vcSubsystemNQN),
+		toRBDMetadataKey(vcNamespaceID),
+		toRBDMetadataKey(vcNamespaceUUID),
+		toRBDMetadataKey(vcHostNQN),
+		toRBDMetadataKey(vcListenerAddress),
+		toRBDMetadataKey(vcListenerPort),
+		toRBDMetadataKey(vcListenerHostname),
+		toRBDMetadataKey(vcGatewayAddress),
+		toRBDMetadataKey(vcGatewayPort),
 	}
 
 	// Retrieve all metadata values
@@ -483,34 +523,35 @@ func (cs *Server) getNVMeoFMetadata(
 	}
 
 	// Parse namespace ID
-	nsid, err := strconv.ParseUint(metadata[mdNamespaceID], 10, 32)
+	nsid, err := strconv.ParseUint(metadata[toRBDMetadataKey(vcNamespaceID)], 10, 32)
 	if err != nil {
 		return nil, fmt.Errorf("invalid namespace ID: %w", err)
 	}
 
-	listenerInfoPort, err := strconv.ParseUint(metadata[mdListenerPort], 10, 32)
+	listenerInfoPort, err := strconv.ParseUint(metadata[toRBDMetadataKey(vcListenerPort)], 10, 32)
 	if err != nil {
 		return nil, fmt.Errorf("invalid listener port: %w", err)
 	}
-	gatewayPort, err := strconv.ParseUint(metadata[mdGatewayPort], 10, 32)
+	gatewayPort, err := strconv.ParseUint(metadata[toRBDMetadataKey(vcGatewayPort)], 10, 32)
 	if err != nil {
 		return nil, fmt.Errorf("invalid gateway port: %w", err)
 	}
 	// Construct NVMe-oF volume data
 	nvmeofData := &nvmeof.NVMeoFVolumeData{
-		SubsystemNQN: metadata[mdSubsystemNQN],
-		NamespaceID:  uint32(nsid),
-		HostNQN:      metadata[mdHostNQN],
+		SubsystemNQN:  metadata[toRBDMetadataKey(vcSubsystemNQN)],
+		NamespaceID:   uint32(nsid),
+		NamespaceUUID: metadata[toRBDMetadataKey(vcNamespaceUUID)],
+		HostNQN:       metadata[toRBDMetadataKey(vcHostNQN)],
 		ListenerInfo: nvmeof.ListenerDetails{
 			GatewayAddress: nvmeof.GatewayAddress{
-				Address: metadata[mdListenerAddress],
+				Address: metadata[toRBDMetadataKey(vcListenerAddress)],
 				Port:    uint32(listenerInfoPort),
 			},
-			Hostname: metadata[mdListenerHostname],
+			Hostname: metadata[toRBDMetadataKey(vcListenerHostname)],
 		},
 		// Store gateway management info separately
 		GatewayManagementInfo: nvmeof.GatewayConfig{
-			Address: metadata[mdGatewayAddress],
+			Address: metadata[toRBDMetadataKey(vcGatewayAddress)],
 			Port:    uint32(gatewayPort),
 		},
 	}
