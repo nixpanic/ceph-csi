@@ -492,7 +492,7 @@ func (ns *NodeServer) getNvmeConnection(volumeContext, publishContext map[string
 
 	hostNQN, ok := publishContext[nvmeofHostNQN]
 	if !ok || hostNQN == "" {
-		return nil, errors.New("missing host NQN in volume context")
+		return nil, errors.New("missing host NQN in publish context")
 	}
 
 	return &NvmeConnectionInfo{
