@@ -35,6 +35,7 @@ import (
 	rbderrors "github.com/ceph/ceph-csi/internal/rbd/errors"
 	"github.com/ceph/ceph-csi/internal/rbd/types"
 	"github.com/ceph/ceph-csi/internal/util"
+	"github.com/ceph/ceph-csi/internal/util/kmod"
 	"github.com/ceph/ceph-csi/internal/util/log"
 
 	"github.com/ceph/go-ceph/rados"
@@ -47,15 +48,10 @@ import (
 )
 
 const (
-	// The following three values are used for 30 seconds timeout
-	// while waiting for RBD Watcher to expire.
-	rbdImageWatcherInitDelay = 1 * time.Second
-	rbdImageWatcherFactor    = 1.4
-	rbdImageWatcherSteps     = 10
-	rbdDefaultMounter        = "rbd"
-	rbdNbdMounter            = "rbd-nbd"
-	defaultLogDir            = "/var/log/ceph"
-	defaultLogStrategy       = "remove" // supports remove, compress and preserve
+	rbdDefaultMounter  = "rbd"
+	rbdNbdMounter      = "rbd-nbd"
+	defaultLogDir      = "/var/log/ceph"
+	defaultLogStrategy = "remove" // supports remove, compress and preserve
 
 	// Output strings returned during invocation of "ceph rbd task add remove <imagespec>" when
 	// command is not supported by ceph manager. Used to check errors and recover when the command
@@ -290,13 +286,13 @@ var (
 	}
 )
 
-// getClientAddressKey returns the key for storing client address metadata for a specific node.
-func getClientAddressKey(volumeId, nodeId string) string {
+// GetClientAddressKey returns the key for storing client address metadata for a specific node.
+func GetClientAddressKey(volumeId, nodeId string) string {
 	return fmt.Sprintf("%s/%s/%s", clientAddressKey, volumeId, nodeId)
 }
 
-// getUserIDMappingKey returns the key for storing user ID mapping metadata for a specific node.
-func getUserIDMappingKey(volumeID, nodeID string) string {
+// GetUserIDMappingKey returns the key for storing user ID mapping metadata for a specific node.
+func GetUserIDMappingKey(volumeID, nodeID string) string {
 	return fmt.Sprintf("%s/%s/%s", userIdMappingKey, volumeID, nodeID)
 }
 
@@ -327,7 +323,6 @@ func prepareKrbdFeatureAttrs() (uint64, error) {
 // GetKrbdSupportedFeatures load the module if needed and return supported
 // features attribute as a string.
 func GetKrbdSupportedFeatures() (string, error) {
-	var stderr string
 	// check if the module is loaded or compiled in
 	_, err := os.Stat(krbdSupportedFeaturesFile)
 	if err != nil {
@@ -337,10 +332,8 @@ func GetKrbdSupportedFeatures() (string, error) {
 			return "", err
 		}
 		// try to load the module
-		_, stderr, err = util.ExecCommand(context.TODO(), "modprobe", rbdDefaultMounter)
+		err = kmod.Modprobe(context.TODO(), rbdDefaultMounter)
 		if err != nil {
-			log.ErrorLogMsg("modprobe failed (%v): %q", err, stderr)
-
 			return "", err
 		}
 	}
