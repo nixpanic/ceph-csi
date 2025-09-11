@@ -1,6 +1,16 @@
 ---
+defaults:
+  actions:
+    update:
+      bot_account: ceph-csi-bot
+    rebase:
+      bot_account: ceph-csi-bot
+    merge:
+      merge_bot_account: ceph-csi-bot
+
 queue_rules:
   - name: default
+    update_bot_account: ceph-csi-bot
     merge_conditions:
       # Conditions to get out of the queue (= merged)
       - or:
