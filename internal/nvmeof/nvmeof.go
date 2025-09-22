@@ -35,8 +35,8 @@ import (
 // This is used to connect to the gateway server.
 // It is also used to specify the address and port of listeners.
 type GatewayAddress struct {
-	Address string
-	Port    uint32
+	Address string `json:"address"`
+	Port    uint32 `json:"port"`
 }
 
 func (ga GatewayAddress) String() string {
@@ -46,7 +46,11 @@ func (ga GatewayAddress) String() string {
 // ListenerDetails holds the listener information for a subsystem.
 type ListenerDetails struct {
 	GatewayAddress
-	Hostname string
+	Hostname string `json:"hostname"`
+}
+
+func (ga ListenerDetails) String() string {
+	return fmt.Sprintf("%s:%d (%s)", ga.Address, ga.Port, ga.Hostname)
 }
 
 // Config holds gateway client configuration.
@@ -333,12 +337,19 @@ func (gw *GatewayRpcClient) CreateListener(ctx context.Context, subsystemNQN str
 	if err != nil {
 		return fmt.Errorf("failed to add listener %s to subsystem %s: %w", listenerInfo.Address, subsystemNQN, err)
 	}
-	if resp.GetStatus() == int32(syscall.EEXIST) { // EEXIST
+	switch resp.GetStatus() {
+	case int32(syscall.EEXIST):
 		log.DebugLog(ctx, "Listener %s already created for subsystem %s", listenerInfo.Address, subsystemNQN)
 
 		return nil // Listener already created, no error
-	}
-	if resp.GetStatus() != 0 {
+	case int32(syscall.EREMOTE): // Handle the stashed listener case
+		log.DebugLog(ctx, "Listener %s stashed for subsystem %s (will be active when %s gateway comes up)",
+			listenerInfo.Address, subsystemNQN, listenerInfo.Hostname)
+
+		return nil // Treat as success
+	case 0:
+		// break
+	default: // resp.GetStatus() != 0
 		return fmt.Errorf("gateway AddListener returned error (status=%d): %s", resp.GetStatus(), resp.GetErrorMessage())
 	}
 	log.DebugLog(ctx, "Listener added successfully: %s to subsystem %s", listenerInfo.Address, subsystemNQN)
