@@ -202,8 +202,8 @@ github.com/ceph/ceph-csi/api/deploy/ocp
 # github.com/ceph/ceph-nvmeof/lib/go/nvmeof v0.0.0-20250812192600-037de4cfd423
 ## explicit; go 1.24.4
 github.com/ceph/ceph-nvmeof/lib/go/nvmeof
-# github.com/ceph/go-ceph v0.35.0
-## explicit; go 1.23.0
+# github.com/ceph/go-ceph v0.36.0
+## explicit; go 1.24.0
 github.com/ceph/go-ceph/cephfs
 github.com/ceph/go-ceph/cephfs/admin
 github.com/ceph/go-ceph/common/admin/manager
@@ -223,8 +223,8 @@ github.com/ceph/go-ceph/rbd/admin
 # github.com/cespare/xxhash/v2 v2.3.0
 ## explicit; go 1.11
 github.com/cespare/xxhash/v2
-# github.com/container-storage-interface/spec v1.11.0
-## explicit; go 1.18
+# github.com/container-storage-interface/spec v1.12.0
+## explicit; go 1.23.0
 github.com/container-storage-interface/spec/lib/go/csi
 # github.com/csi-addons/kubernetes-csi-addons v0.13.0
 ## explicit; go 1.24.0
