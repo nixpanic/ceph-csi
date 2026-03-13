@@ -147,33 +147,36 @@ func (sv *SMBVolume) CreateShare(backend *csi.Volume) error {
 		return fmt.Errorf("failed to get SMBAdmin: %w", err)
 	}
 
-	share := smb.CephFSShareSpec{
-		FileSystemName: fs,
-		ClusterID:      smbCluster,
-		ShareName:      sv.volumeID,
-		Path:           path,
-	}
+	// Create share resource using declarative API
+	share := smb.NewShare(smbCluster, sv.volumeID)
+	share.Name = sv.volumeID
+	share.SetCephFS(fs, "", "", path)
 
 	// Apply additional share parameters if provided
 	if shareParams != "" {
 		// Parse share parameters (format: key1=value1,key2=value2)
-		// This can be extended based on specific SMB/Samba requirements
 		for _, param := range strings.Split(shareParams, ",") {
 			kv := strings.SplitN(param, "=", 2)
 			if len(kv) == 2 {
-				// Apply parameters to the share spec
-				// This will depend on the actual go-ceph SMB admin API
+				switch kv[0] {
+				case "readonly":
+					share.ReadOnly = (kv[1] == "true")
+				case "browseable":
+					share.Browseable = (kv[1] == "true")
+				}
 			}
 		}
 	}
 
-	_, err = smba.CreateCephFSShare(share)
+	// Apply the share resource
+	_, err = smba.Apply([]smb.Resource{share}, nil)
 	switch {
 	case err == nil:
 		return nil
-	case strings.Contains(err.Error(), "Share already exists"):
+	case strings.Contains(err.Error(), "already exists"):
 		return nil
-	case strings.Contains(err.Error(), "rados: ret=-2"): // try with the old command
+	case strings.Contains(err.Error(), "not implemented"):
+		// Fallback to CLI command
 		break
 	default: // any other error
 		return fmt.Errorf("creating SMB share %q on cluster %q failed: %w",
