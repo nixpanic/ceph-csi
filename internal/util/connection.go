@@ -23,6 +23,7 @@ import (
 
 	ca "github.com/ceph/go-ceph/cephfs/admin"
 	"github.com/ceph/go-ceph/common/admin/nfs"
+	"github.com/ceph/go-ceph/common/admin/smb"
 	osd "github.com/ceph/go-ceph/common/admin/osd"
 	"github.com/ceph/go-ceph/rados"
 	ra "github.com/ceph/go-ceph/rbd/admin"
@@ -159,6 +160,16 @@ func (cc *ClusterConnection) GetNFSAdmin() (*nfs.Admin, error) {
 	}
 
 	return nfs.NewFromConn(cc.conn), nil
+}
+
+// GetSMBAdmin returns an Admin type that can be used to interact with the
+// SMB-cluster that is managed by Ceph.
+func (cc *ClusterConnection) GetSMBAdmin() (*smb.Admin, error) {
+	if cc.conn == nil {
+		return nil, errors.New("cluster is not connected yet")
+	}
+
+	return smb.NewFromConn(cc.conn), nil
 }
 
 // GetAddrs returns the addresses of the RADOS session,
