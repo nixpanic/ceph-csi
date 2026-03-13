@@ -42,6 +42,7 @@ rules:
       - rbd
       - rebase
       - revert
+      - smb
       - util
       - nfs
       - nvmeof
