@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ceph/ceph-csi/internal/nvmeof"
@@ -116,6 +117,84 @@ func TestPolulateVolumeContext(t *testing.T) {
 	require.Equal(t,
 		strconv.FormatUint(uint64(config.GatewayManagementInfo.Port), 10),
 		volume.GetVolumeContext()["GatewayPort"])
+}
+
+func TestParseAllowHostNQNs(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		params      map[string]string
+		expected    []string
+		expectError bool
+	}{
+		{
+			name:     "empty parameters",
+			params:   map[string]string{},
+			expected: nil,
+		},
+		{
+			name:     "missing key",
+			params:   map[string]string{"other": "value"},
+			expected: nil,
+		},
+		{
+			name:     "empty value",
+			params:   map[string]string{AllowHostNQNs: ""},
+			expected: nil,
+		},
+		{
+			name: "single NQN",
+			params: map[string]string{
+				AllowHostNQNs: "- nqn.2014-08.org.nvmexpress:host1\n",
+			},
+			expected: []string{"nqn.2014-08.org.nvmexpress:host1"},
+		},
+		{
+			name: "multiple NQNs",
+			params: map[string]string{
+				AllowHostNQNs: "- nqn.2014-08.org.nvmexpress:host1\n- nqn.2014-08.org.nvmexpress:host2\n",
+			},
+			expected: []string{"nqn.2014-08.org.nvmexpress:host1", "nqn.2014-08.org.nvmexpress:host2"},
+		},
+		{
+			name: "wildcard host",
+			params: map[string]string{
+				AllowHostNQNs: "- \"*\"\n",
+			},
+			expected: []string{"*"},
+		},
+		{
+			name: "flow sequence notation",
+			params: map[string]string{
+				AllowHostNQNs: `["nqn.2014-08.org.nvmexpress:host1", "nqn.2014-08.org.nvmexpress:host2"]`,
+			},
+			expected: []string{"nqn.2014-08.org.nvmexpress:host1", "nqn.2014-08.org.nvmexpress:host2"},
+		},
+		{
+			name: "invalid YAML",
+			params: map[string]string{
+				AllowHostNQNs: "not: a: list",
+			},
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			result, err := parseAllowHostNQNs(tt.params)
+
+			if tt.expectError {
+				require.Error(t, err)
+				assert.Nil(t, result)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.expected, result)
+			}
+		})
+	}
 }
 
 func TestGetGatewayConfigFromRequest(t *testing.T) {

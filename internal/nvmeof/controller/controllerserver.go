@@ -25,6 +25,7 @@ import (
 	"strconv"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
+	yaml "go.yaml.in/yaml/v3"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -352,8 +353,25 @@ func (cs *Server) ControllerModifyVolume(
 
 		return nil, status.Errorf(codes.InvalidArgument, "failed to parse QoS parameters: %v", err)
 	}
+
+	// Step 3: Parse allowHostNQNs parameter
+	allowHostNQNs, err := parseAllowHostNQNs(params)
+	if err != nil {
+		log.ErrorLog(ctx, "failed to parse allowHostNQNs parameter: %v", err)
+
+		return nil, status.Errorf(codes.InvalidArgument, "failed to parse allowHostNQNs: %v", err)
+	}
+
+	// Step 4: Apply QoS modification if requested
 	if nvmeofQoS != nil {
-		return cs.modifyNVMeoFQoS(ctx, req, nvmeofQoS)
+		if _, err := cs.modifyNVMeoFQoS(ctx, req, nvmeofQoS); err != nil {
+			return nil, err
+		}
+	}
+
+	// Step 5: Apply allowed hosts modification if requested
+	if len(allowHostNQNs) > 0 {
+		return cs.modifyAllowedHosts(ctx, req, allowHostNQNs)
 	}
 
 	return &csi.ControllerModifyVolumeResponse{}, nil
@@ -584,6 +602,26 @@ func parseQoSParameters(params map[string]string) (*nvmeof.NVMeoFQosVolume, erro
 	return qos, nil
 }
 
+// parseAllowHostNQNs extracts and parses the allowHostNQNs parameter from the given map.
+// The value must be a YAML list of host NQN strings.
+func parseAllowHostNQNs(params map[string]string) ([]string, error) {
+	val, exists := params[AllowHostNQNs]
+	if !exists || val == "" {
+		return nil, nil
+	}
+
+	var nqns []string
+	if err := yaml.Unmarshal([]byte(val), &nqns); err != nil {
+		return nil, fmt.Errorf("invalid %s: must be a YAML list of strings: %w", AllowHostNQNs, err)
+	}
+
+	if len(nqns) == 0 {
+		return nil, nil
+	}
+
+	return nqns, nil
+}
+
 // modifyNVMeoFQoS handles NVMe-oF gateway QoS modification.
 func (cs *Server) modifyNVMeoFQoS(
 	ctx context.Context,
@@ -659,6 +697,73 @@ func (cs *Server) modifyNVMeoFQoS(
 	}
 
 	log.DebugLog(ctx, "Successfully modified NVMe-oF QoS for volume %s", volumeID)
+
+	return &csi.ControllerModifyVolumeResponse{}, nil
+}
+
+// modifyAllowedHosts adds the given host NQNs to the subsystem's allowed hosts list.
+func (cs *Server) modifyAllowedHosts(
+	ctx context.Context,
+	req *csi.ControllerModifyVolumeRequest,
+	hostNQNs []string,
+) (*csi.ControllerModifyVolumeResponse, error) {
+	volumeID := req.GetVolumeId()
+
+	// Step 1: Get secrets
+	secrets := req.GetSecrets()
+	if secrets == nil {
+		secretName, secretNamespace, err := util.GetControllerPublishSecretRef(volumeID, util.RBDType)
+		if err != nil {
+			log.ErrorLog(ctx, "Failed to get secret reference: %v", err)
+
+			return nil, status.Errorf(codes.Internal, "failed to get secret reference: %v", err)
+		}
+
+		secrets, err = k8s.GetSecret(secretName, secretNamespace)
+		if err != nil {
+			log.ErrorLog(ctx, "Failed to get secret from k8s: %v", err)
+
+			return nil, status.Errorf(codes.Internal, "failed to get secret: %v", err)
+		}
+	}
+
+	// Step 2: Get NVMe-oF metadata
+	nvmeofData, err := cs.getNVMeoFMetadata(ctx, secrets, volumeID)
+	if err != nil {
+		log.ErrorLog(ctx, "Failed to get NVMe-oF metadata: %v", err)
+
+		return nil, nvmeoferrors.ToGRPCError(err)
+	}
+
+	// Step 3: Connect to gateway
+	config := &nvmeof.GatewayConfig{
+		Address: nvmeofData.GatewayManagementInfo.Address,
+		Port:    nvmeofData.GatewayManagementInfo.Port,
+	}
+	gateway, err := connectGateway(ctx, config)
+	if err != nil {
+		log.ErrorLog(ctx, "Gateway connection failed: %v", err)
+
+		return nil, status.Errorf(codes.Unavailable, "gateway connection failed: %v", err)
+	}
+	defer func() {
+		if closeErr := gateway.Destroy(); closeErr != nil {
+			log.ErrorLog(ctx, "Failed to close gateway connection: %v", closeErr)
+		}
+	}()
+
+	// Step 4: Add each host NQN to the subsystem
+	for _, hostNQN := range hostNQNs {
+		log.DebugLog(ctx, "Adding host NQN %s to subsystem %s", hostNQN, nvmeofData.SubsystemNQN)
+
+		if err := gateway.AddHost(ctx, nvmeofData.SubsystemNQN, hostNQN, nvmeof.DHCHAPKeys{}); err != nil {
+			log.ErrorLog(ctx, "Failed to add host %s: %v", hostNQN, err)
+
+			return nil, status.Errorf(codes.Internal, "failed to add host %s: %v", hostNQN, err)
+		}
+	}
+
+	log.DebugLog(ctx, "Successfully added %d host NQN(s) to volume %s", len(hostNQNs), volumeID)
 
 	return &csi.ControllerModifyVolumeResponse{}, nil
 }
@@ -1059,6 +1164,15 @@ func getHostNQNFromNodeID(nodeID string) (string, error) {
 
 	return prefix + nodeID, nil
 }
+
+// AllowHostNQNs is the VolumeAttributesClass mutable parameter key for specifying
+// a YAML list of host NQNs to allow access to a volume. Use "*" to allow any host.
+// Example:
+//
+//	allowHostNQNs: |
+//	  - nqn.2014-08.org.nvmexpress:host1
+//	  - nqn.2014-08.org.nvmexpress:host2
+const AllowHostNQNs = "allowHostNQNs"
 
 // VolumeContext metadata keys.
 const (
