@@ -106,7 +106,7 @@ jobs:
               labels: ['queued/rebase']
             })
 
-      - name: Request rebase through Mergify
+      - name: Request update through Mergify
         if: steps.check_rebase.outputs.needs_rebase == 'true'
         # yamllint disable-line rule:line-length
         uses: peter-evans/create-or-update-comment@71345be0265236311c031f5c7866368bd1eff043  # v4.0.0
@@ -114,7 +114,7 @@ jobs:
           token: ${{ secrets.CEPH_CSI_BOT_TOKEN }}
           issue-number: ${{ github.event.issue.number }}
           body: |
-            @mergifyio rebase
+            @mergifyio update
 
       - name: Add ok-to-test label directly
         if: steps.check_rebase.outputs.needs_rebase == 'false'

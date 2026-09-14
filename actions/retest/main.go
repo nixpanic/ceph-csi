@@ -149,10 +149,10 @@ func main() {
 					if slices.Contains([]string{"failed", "failure"}, r.GetState()) {
 						log.Printf("found failed test %s\n", r.GetContext())
 						failedTestFound = true
-						// rebase the pr if it is behind the devel branch.
+						// update the pr if it is behind the devel branch.
 						if (re.MergeableState != nil) && (*re.MergeableState == "BEHIND") {
 							comment := &github.IssueComment{
-								Body: github.String("@mergifyio rebase"),
+								Body: github.String("@mergifyio update"),
 							}
 							_, _, err := c.client.Issues.CreateComment(context.TODO(), c.owner, c.repo, prNumber, comment)
 							if err != nil {
